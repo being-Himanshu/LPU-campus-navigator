@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>CSE Block — Smart Campus Navigator</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg:#f8f5f0;--white:#fff;--grey:#ebebeb;--border:#dadce0;
+--blue:#1a73e8;--green:#34a853;--yellow:#fbbc04;--red:#ea4335;
+--text:#202124;--text2:#5f6368;--text3:#9aa0a6;
+--shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px rgba(60,64,67,.15);
+--shadow-sm:0 1px 2px rgba(60,64,67,.3);
+--font:'Roboto',sans-serif;
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text)}
+button{font-family:var(--font);cursor:pointer;border:none;background:none;outline:none}
+.mi{font-family:'Material Icons Round';font-size:24px;color:var(--text2)}
+
+/* ===== SEARCH SCREEN ===== */
+#search-screen{position:fixed;inset:0;z-index:300;background:var(--bg);display:flex;flex-direction:column;transition:transform .4s cubic-bezier(.4,0,.2,1)}
+#search-screen.hidden{transform:translateY(-100%);pointer-events:none}
+.search-bg{position:absolute;inset:0;background:var(--bg);z-index:0}
+.search-content{position:relative;z-index:1;display:flex;flex-direction:column;height:100%}
+.search-bar-wrap{padding:12px 16px 8px}
+.search-bar{display:flex;align-items:center;background:var(--white);border-radius:28px;padding:0 16px;height:48px;box-shadow:var(--shadow);gap:12px}
+.search-bar input{flex:1;border:none;outline:none;font-size:16px;font-family:var(--font);color:var(--text);background:transparent}
+.search-bar input::placeholder{color:var(--text3)}
+.chips{display:flex;gap:8px;padding:4px 16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{white-space:nowrap;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid var(--border);color:var(--text2);background:var(--white);transition:all .2s;flex-shrink:0}
+.chip.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.room-list{flex:1;overflow-y:auto;padding:0 16px}
+.room-item{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid #f1f3f4;cursor:pointer;transition:background .15s}
+.room-item:hover{background:#f8f9fa}
+.room-item-icon{width:40px;height:40px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center}
+.room-item-icon .mi{color:var(--blue);font-size:20px}
+.room-item-info{flex:1}
+.room-item-name{font-size:15px;font-weight:500}
+.room-item-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.room-item-badge{padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;color:#fff}
+.badge-low{background:var(--green)}.badge-med{background:var(--yellow);color:var(--text)}.badge-high{background:var(--red)}
+
+/* ===== MAP SCREEN ===== */
+#map-screen{position:fixed;inset:0;z-index:100;background:var(--bg)}
+.map-search{position:absolute;top:12px;left:12px;right:12px;z-index:110;display:flex;align-items:center;gap:8px}
+.map-search-bar{flex:1;display:flex;align-items:center;background:var(--white);border-radius:28px;padding:0 8px 0 4px;height:44px;box-shadow:var(--shadow);gap:4px}
+.map-search-bar span.mi{padding:8px}
+.map-search-text{flex:1;font-size:15px;color:var(--text2);cursor:pointer}
+.mode-chip{padding:4px 10px;border-radius:14px;font-size:11px;font-weight:500;background:#e8f0fe;color:var(--blue);display:flex;align-items:center;gap:4px}
+.mode-chip.live{background:#fce8e6;color:var(--red)}
+.mode-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse .8s infinite alternate}
+.mode-chip.live .mode-dot{background:var(--red)}
+@keyframes pulse{to{opacity:.3}}
+
+/* Map SVG */
+#map-svg-wrap{position:absolute;inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#map-svg-wrap svg{width:94%;max-width:800px;height:auto}
+.room-shape{fill:var(--white);stroke:#dadce0;stroke-width:1;cursor:pointer;transition:all .2s;filter:drop-shadow(0 1px 2px rgba(0,0,0,.08))}
+.room-shape:hover{fill:#e8f0fe;stroke:var(--blue)}
+.room-shape.selected{fill:var(--blue);stroke:var(--blue)}
+.corridor-shape{fill:#ebebeb;stroke:none}
+.stair-shape{fill:#f1f3f4;stroke:#dadce0;stroke-width:.5}
+.wr-shape{fill:#e3f2fd;stroke:#90caf9;stroke-width:.5}
+.room-label{font-size:10px;font-weight:500;fill:var(--text);pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.room-label.sel{fill:#fff}
+.room-count{font-size:8px;font-weight:700;fill:var(--text2);pointer-events:none;text-anchor:middle}
+.crowd-indicator{pointer-events:none}
+.map-grid{stroke:#e8e4df;stroke-width:.3}
+
+/* Nav path */
+.nav-path{fill:none;stroke:var(--blue);stroke-width:3;stroke-dasharray:8 6;stroke-linecap:round;opacity:0;transition:opacity .4s}
+.nav-path.visible{opacity:1;animation:dash-flow .8s linear infinite}
+@keyframes dash-flow{to{stroke-dashoffset:-14}}
+
+/* FABs */
+.fab-group{position:absolute;right:12px;bottom:180px;z-index:110;display:flex;flex-direction:column;gap:10px}
+.fab{width:44px;height:44px;border-radius:22px;background:var(--white);box-shadow:var(--shadow-sm);display:flex;align-items:center;justify-content:center;transition:all .15s}
+.fab:hover{box-shadow:var(--shadow)}
+.fab .mi{font-size:20px}
+.fab-floor{font-size:13px;font-weight:700;color:var(--blue);width:44px;height:44px;border-radius:22px;background:var(--white);box-shadow:var(--shadow-sm);display:flex;align-items:center;justify-content:center}
+
+/* Floor selector popup */
+#floor-popup{position:absolute;right:60px;bottom:180px;z-index:120;background:var(--white);border-radius:12px;box-shadow:var(--shadow);padding:6px;display:none;flex-direction:column;gap:2px}
+#floor-popup.show{display:flex}
+.floor-opt{padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px;transition:background .15s;cursor:pointer}
+.floor-opt:hover{background:#f1f3f4}
+.floor-opt.active{background:#e8f0fe;color:var(--blue)}
+.floor-dot{width:8px;height:8px;border-radius:50%}
+
+/* ===== BOTTOM SHEET ===== */
+#bottom-sheet{position:absolute;left:0;right:0;bottom:0;z-index:150;background:var(--white);border-radius:16px 16px 0 0;box-shadow:0 -2px 8px rgba(0,0,0,.12);transition:transform .35s cubic-bezier(.4,0,.2,1);touch-action:none;max-height:92vh}
+.sheet-handle{width:100%;display:flex;justify-content:center;padding:10px 0 6px;cursor:grab}
+.sheet-handle-bar{width:36px;height:4px;border-radius:2px;background:#dadce0}
+.sheet-head{padding:0 20px 12px;border-bottom:1px solid #f1f3f4}
+.sheet-title{font-size:20px;font-weight:500;color:var(--text)}
+.sheet-subtitle{font-size:13px;color:var(--text2);margin-top:2px}
+.sheet-actions{display:flex;gap:16px;padding:16px 20px;justify-content:flex-start}
+.sheet-action{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.sheet-action-icon{width:44px;height:44px;border-radius:22px;background:#e8f0fe;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.sheet-action-icon .mi{color:var(--blue);font-size:20px}
+.sheet-action:hover .sheet-action-icon{background:#d2e3fc}
+.sheet-action-label{font-size:11px;color:var(--blue);font-weight:500}
+.sheet-stats{display:flex;gap:10px;padding:0 20px 16px}
+.sheet-stat{flex:1;padding:12px;border-radius:12px;background:#f8f9fa;text-align:center}
+.sheet-stat-val{font-size:18px;font-weight:700}
+.sheet-stat-label{font-size:11px;color:var(--text2);margin-top:2px}
+.sheet-stat-sub{font-size:10px;color:var(--text3);margin-top:1px}
+.sheet-update{padding:4px 20px 12px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse .8s infinite alternate}
+.sheet-directions{padding:4px 20px 16px}
+.sheet-dir-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);flex-wrap:wrap}
+.dir-step{padding:3px 8px;background:#e8f0fe;border-radius:8px;font-size:12px;color:var(--blue);font-weight:500}
+.sheet-capacity{padding:0 20px 16px}
+.cap-bar-bg{height:6px;border-radius:3px;background:#f1f3f4;overflow:hidden;margin-top:6px}
+.cap-bar{height:100%;border-radius:3px;transition:width .5s,background .5s}
+.sheet-info-default{padding:16px 20px}
+.sheet-info-default h3{font-size:16px;font-weight:500}
+.sheet-info-default p{font-size:13px;color:var(--text2);margin-top:4px}
+
+/* Suggestion card */
+#suggestion-card{position:absolute;left:12px;right:66px;bottom:140px;z-index:105;background:var(--white);border-radius:12px;box-shadow:var(--shadow-sm);padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s}
+#suggestion-card:hover{box-shadow:var(--shadow)}
+.sug-icon{width:32px;height:32px;border-radius:50%;background:#e6f4ea;display:flex;align-items:center;justify-content:center}
+.sug-icon .mi{color:var(--green);font-size:18px}
+.sug-text{flex:1;font-size:12px;color:var(--text2);line-height:1.4}
+.sug-text b{color:var(--text);font-weight:500}
+
+/* Nav mode top bar */
+#nav-bar{position:absolute;top:0;left:0;right:0;z-index:160;background:var(--blue);color:#fff;padding:12px 16px;display:none;align-items:center;gap:12px}
+#nav-bar.show{display:flex}
+#nav-bar .mi{color:#fff}
+#nav-bar-text{flex:1;font-size:15px;font-weight:500}
+#nav-bottom{position:absolute;left:0;right:0;bottom:0;z-index:160;background:var(--white);border-radius:16px 16px 0 0;box-shadow:0 -2px 8px rgba(0,0,0,.15);padding:16px 20px;display:none}
+#nav-bottom.show{display:block}
+.nav-summary{font-size:15px;font-weight:500;margin-bottom:4px}
+.nav-meta{font-size:12px;color:var(--text2);margin-bottom:12px}
+.nav-steps{display:flex;flex-direction:column;gap:10px;max-height:180px;overflow-y:auto}
+.nav-step{display:flex;gap:10px;align-items:flex-start;font-size:13px}
+.nav-step-icon{width:28px;height:28px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-step-icon .mi{font-size:16px;color:var(--blue)}
+.nav-exit{margin-top:12px;width:100%;padding:10px;border-radius:24px;background:#f1f3f4;font-size:14px;font-weight:500;color:var(--text);text-align:center}
+.nav-exit:hover{background:#e8eaed}
+
+/* ===== 360 VIEWER ===== */
+#pano-overlay{position:fixed;inset:0;z-index:500;background:#000;display:none}
+#pano-overlay.show{display:flex;flex-direction:column}
+#pano-container{flex:1;position:relative}
+.pano-top{position:absolute;top:12px;left:12px;z-index:510;display:flex;gap:8px}
+.pano-pill{background:rgba(255,255,255,.9);backdrop-filter:blur(8px);padding:8px 14px;border-radius:20px;font-size:13px;font-weight:500;color:var(--text);box-shadow:var(--shadow-sm)}
+.pano-close{position:absolute;top:12px;right:12px;z-index:510;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)}
+.pano-close .mi{font-size:20px;color:var(--text)}
+.pano-bottom{position:absolute;bottom:0;left:0;right:0;z-index:510;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.pano-nav-btn{width:36px;height:36px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center}
+.pano-nav-btn .mi{color:#fff;font-size:18px}
+.pano-info{flex:1;font-size:13px}.pano-info b{font-weight:500}
+.pano-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text2);gap:12px;background:var(--white)}
+.pano-msg .mi{font-size:64px;color:var(--text3)}
+
+@media(max-width:600px){
+.sheet-stats{flex-wrap:wrap}
+.sheet-stat{min-width:calc(50% - 8px)}
+}
+</style>
+</head>
+<body>
+<!-- SEARCH SCREEN -->
+<div id="search-screen">
+<div class="search-bg"></div>
+<div class="search-content">
+<div class="search-bar-wrap">
+<div class="search-bar">
+<span class="mi" style="color:var(--text3)">search</span>
+<input type="text" id="search-input" placeholder="Search rooms, labs, floors..." oninput="filterRooms()">
+<span class="mi" style="color:var(--text3)">mic</span>
+</div>
+</div>
+<div class="chips" id="chip-bar">
+<button class="chip active" data-filter="all" onclick="setFilter('all',this)">All Floors</button>
+<button class="chip" data-filter="lab" onclick="setFilter('lab',this)">Labs</button>
+<button class="chip" data-filter="class" onclick="setFilter('class',this)">Classrooms</button>
+<button class="chip" data-filter="low" onclick="setFilter('low',this)">Least Crowded</button>
+<button class="chip" data-filter="wr" onclick="setFilter('wr',this)">Washrooms</button>
+</div>
+<div class="room-list" id="room-list"></div>
+</div>
+</div>
+
+<!-- MAP SCREEN -->
+<div id="map-screen">
+<div class="map-search">
+<div class="map-search-bar" onclick="showSearch()">
+<span class="mi">arrow_back</span>
+<span class="map-search-text" id="map-search-label">CSE Block</span>
+<div class="mode-chip" id="mode-chip" onclick="event.stopPropagation();toggleMode()"><span class="mode-dot"></span><span id="mode-text">Demo</span></div>
+</div>
+</div>
+
+<div id="map-svg-wrap"></div>
+
+<div class="fab-group">
+<button class="fab-floor" id="fab-floor-btn" onclick="toggleFloorPopup()">G</button>
+<button class="fab" onclick="toggleFloorPopup()"><span class="mi">layers</span></button>
+<button class="fab" title="Zoom In" onclick="zoomMap(1)"><span class="mi">add</span></button>
+<button class="fab" title="Zoom Out" onclick="zoomMap(-1)"><span class="mi">remove</span></button>
+</div>
+
+<div id="floor-popup"></div>
+<div id="suggestion-card">
+<div class="sug-icon"><span class="mi">lightbulb</span></div>
+<div class="sug-text" id="sug-text">Calculating best floor...</div>
+</div>
+
+<!-- NAV MODE -->
+<div id="nav-bar"><button onclick="exitNav()"><span class="mi">close</span></button><span id="nav-bar-text">Navigation</span></div>
+<div id="nav-bottom"><div class="nav-summary" id="nav-summary"></div><div class="nav-meta" id="nav-meta"></div><div class="nav-steps" id="nav-steps"></div><button class="nav-exit" onclick="exitNav()">Exit Navigation</button></div>
+
+<!-- BOTTOM SHEET -->
+<div id="bottom-sheet">
+<div class="sheet-handle" id="sheet-handle"><div class="sheet-handle-bar"></div></div>
+<div id="sheet-content">
+<div class="sheet-info-default" id="sheet-default">
+<h3>CSE Block — 7 Floors — 48 Rooms</h3>
+<p>Tap a room or search to navigate</p>
+</div>
+<div id="sheet-room" style="display:none">
+<div class="sheet-head"><div class="sheet-title" id="sh-title"></div><div class="sheet-subtitle" id="sh-sub"></div></div>
+<div class="sheet-actions">
+<div class="sheet-action" onclick="startNav()"><div class="sheet-action-icon"><span class="mi">navigation</span></div><span class="sheet-action-label">Navigate</span></div>
+<div class="sheet-action" onclick="open360()"><div class="sheet-action-icon"><span class="mi">360</span></div><span class="sheet-action-label">360° Tour</span></div>
+<div class="sheet-action" onclick="shareRoom()"><div class="sheet-action-icon"><span class="mi">share</span></div><span class="sheet-action-label">Share</span></div>
+<div class="sheet-action"><div class="sheet-action-icon"><span class="mi">bookmark_border</span></div><span class="sheet-action-label">Save</span></div>
+</div>
+<div class="sheet-stats">
+<div class="sheet-stat"><div class="sheet-stat-val" id="sh-crowd" style="color:var(--green)">—</div><div class="sheet-stat-label">Crowd Level</div><div class="sheet-stat-sub" id="sh-people"></div></div>
+<div class="sheet-stat"><div class="sheet-stat-val" id="sh-temp">—</div><div class="sheet-stat-label">Temperature</div><div class="sheet-stat-sub" id="sh-temp-sub"></div></div>
+<div class="sheet-stat"><div class="sheet-stat-val" id="sh-hum">—</div><div class="sheet-stat-label">Humidity</div><div class="sheet-stat-sub" id="sh-hum-sub"></div></div>
+</div>
+<div class="sheet-update"><span class="live-dot"></span><span id="sh-updated">Live data</span></div>
+<div class="sheet-directions" id="sh-dir-wrap"></div>
+<div class="sheet-capacity" id="sh-cap-wrap"></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- 360 OVERLAY -->
+<div id="pano-overlay">
+<div id="pano-container">
+<div class="pano-top"><div class="pano-pill" id="pano-pill">Room · Floor</div></div>
+<button class="pano-close" onclick="close360()"><span class="mi">close</span></button>
+<div class="pano-bottom">
+<button class="pano-nav-btn" onclick="panoMove(-1)"><span class="mi">arrow_back</span></button>
+<div class="pano-info" id="pano-info">Room info</div>
+<button class="pano-nav-btn" onclick="panoMove(1)"><span class="mi">arrow_forward</span></button>
+</div>
+</div>
+</div>
+
+<script>
+// ===== DATA MODEL =====
+const FLOORS=['G','F1','F2','F3','F4','F5','F6'];
+const roomData={};
+const floorLayouts={};
+const initData={
+F1:{T1:{p:18,t:31,h:72},T2:{p:6,t:28,h:63},T3:{p:24,t:33,h:75},T4:{p:4,t:27,h:60},B1:{p:12,t:29,h:68},B2:{p:20,t:30,h:70},B3:{p:8,t:27,h:62},B4:{p:3,t:26,h:58}},
+F2:{T1:{p:15,t:30,h:70},T2:{p:9,t:27,h:61},T3:{p:22,t:32,h:74},T4:{p:5,t:26,h:59},B1:{p:11,t:28,h:65},B2:{p:7,t:27,h:60},B3:{p:19,t:31,h:71},WR:{p:0,t:25,h:80}},
+F3:{T1:{p:20,t:32,h:73},T2:{p:14,t:29,h:65},T3:{p:6,t:27,h:60},T4:{p:25,t:34,h:76},B1:{p:3,t:25,h:55},B2:{p:17,t:30,h:69},B3:{p:9,t:28,h:63},B4:{p:13,t:29,h:66}},
+F4:{T1:{p:8,t:27,h:61},T2:{p:21,t:31,h:72},T3:{p:4,t:26,h:57},T4:{p:16,t:30,h:68},B1:{p:24,t:33,h:75},B2:{p:2,t:24,h:52},B3:{p:11,t:28,h:64},WR:{p:0,t:25,h:82}},
+F5:{T1:{p:7,t:27,h:60},T2:{p:18,t:31,h:71},T3:{p:13,t:29,h:65},T4:{p:22,t:32,h:74},B1:{p:5,t:26,h:58},B2:{p:9,t:28,h:62},B3:{p:16,t:30,h:69},B4:{p:1,t:24,h:53}},
+F6:{T1:{p:12,t:29,h:66},T2:{p:4,t:25,h:56},T3:{p:19,t:31,h:72},T4:{p:8,t:27,h:61},B1:{p:14,t:30,h:68},B2:{p:23,t:33,h:75},B3:{p:6,t:26,h:59},WR:{p:0,t:25,h:83}}
+};
+
+// Build room data
+for(const fl of FLOORS){
+if(fl==='G')continue;
+const fi=parseInt(fl[1]);
+const isEven=fi%2===0;
+const slots=isEven?['T1','T2','T3','T4','B1','B2','B3','WR']:['T1','T2','T3','T4','B1','B2','B3','B4'];
+for(const s of slots){
+const id=fl+'-'+s;
+const d=initData[fl][s];
+const type=s==='WR'?'washroom':'classroom';
+const label=s==='WR'?'WR':'CS-'+s;
+roomData[id]={id,floor:fl,slot:s,label,type,name:'CS-'+s,fullName:label+' · '+fl+' · CSE Block',people:d.p,temp:d.t,hum:d.h,capacity:60};
+}
+}
+
+let currentFloor='F1',selectedRoom=null,isLiveMode=false,sheetState='peek',navMode=false,mapZoom=1;
+let updateTime=Date.now();
+
+// ===== HELPERS =====
+function crowdLvl(n){return n<=10?'low':n<=25?'med':'high'}
+function crowdLabel(n){return n<=10?'LOW':n<=25?'MEDIUM':'HIGH'}
+function crowdColor(n){const l=crowdLvl(n);return l==='low'?'var(--green)':l==='med'?'var(--yellow)':'var(--red)'}
+function crowdHex(n){return n<=10?'#34a853':n<=25?'#fbbc04':'#ea4335'}
+function tempDesc(t){return t<27?'Cool':t<30?'Comfortable':t<33?'Warm':'Hot'}
+function humDesc(h){return h<60?'Low':h<70?'Normal':'High'}
+
+// ===== SVG MAP =====
+function renderMap(){
+const W=760,H=420;
+const fl=currentFloor;
+let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${mapZoom})">`;
+// Grid
+for(let x=0;x<=W;x+=30)svg+=`<line class="map-grid" x1="${x}" y1="0" x2="${x}" y2="${H}"/>`;
+for(let y=0;y<=H;y+=30)svg+=`<line class="map-grid" x1="0" y1="${y}" x2="${W}" y2="${y}"/>`;
+
+if(fl==='G'){
+// Ground floor
+svg+=`<rect class="corridor-shape" x="340" y="300" width="80" height="120" rx="2"/>`;
+svg+=`<text class="room-label" x="380" y="370" style="font-size:9px;fill:var(--text2)">ENTRY</text>`;
+svg+=`<rect class="corridor-shape" x="100" y="260" width="560" height="40" rx="2"/>`;
+// Staircases
+svg+=`<rect class="stair-shape" x="100" y="180" width="80" height="80" rx="4"/>`;
+svg+=`<text class="room-label" x="140" y="215" style="font-size:9px">ST-L</text>`;
+svg+=`<text class="room-label" x="140" y="230" style="font-size:8px;fill:var(--text3)">↕ Stairs</text>`;
+svg+=`<rect class="stair-shape" x="340" y="180" width="80" height="80" rx="4"/>`;
+svg+=`<text class="room-label" x="380" y="215" style="font-size:9px">ST-C</text>`;
+svg+=`<text class="room-label" x="380" y="230" style="font-size:8px;fill:var(--text3)">↕ Stairs</text>`;
+svg+=`<rect class="stair-shape" x="580" y="180" width="80" height="80" rx="4"/>`;
+svg+=`<text class="room-label" x="620" y="215" style="font-size:9px">ST-R</text>`;
+svg+=`<text class="room-label" x="620" y="230" style="font-size:8px;fill:var(--text3)">↕ Stairs</text>`;
+svg+=`<polygon points="380,300 360,320 400,320" fill="var(--blue)" opacity=".4"/>`;
+svg+=`<text class="room-label" x="380" y="395" style="font-size:10px;fill:var(--blue);font-weight:700">MAIN ENTRANCE</text>`;
+}else{
+const fi=parseInt(fl[1]);const isEven=fi%2===0;
+// Corridor
+svg+=`<rect class="corridor-shape" x="80" y="185" width="600" height="50" rx="3"/>`;
+svg+=`<text class="room-label" x="380" y="212" style="font-size:9px;fill:var(--text3)">CORRIDOR</text>`;
+// Top row rooms
+const topSlots=['T1','T2','T3','T4'];
+const topX=[80,230,380,530];
+for(let i=0;i<4;i++){
+const id=fl+'-'+topSlots[i];const r=roomData[id];if(!r)continue;
+const x=topX[i],y=50,w=140,h=130;
+const sel=selectedRoom===id;
+svg+=`<rect class="room-shape${sel?' selected':''}" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" onclick="selectRoom('${id}')"/>`;
+svg+=`<text class="room-label${sel?' sel':''}" x="${x+w/2}" y="${y+h/2-8}">CS-${topSlots[i]}</text>`;
+svg+=`<text class="room-count" x="${x+w/2}" y="${y+h/2+8}" fill="${crowdHex(r.people)}">${r.people}p</text>`;
+svg+=`<circle class="crowd-indicator" cx="${x+w-12}" cy="${y+12}" r="5" fill="${crowdHex(r.people)}"><animate attributeName="r" values="4;6;4" dur="2s" repeatCount="indefinite"/></circle>`;
+// Door
+svg+=`<rect x="${x+w/2-12}" y="${y+h-1}" width="24" height="4" fill="#dadce0" rx="1"/>`;
+}
+// Bottom row
+const botSlots=isEven?['B1','B2','B3','WR']:['B1','B2','B3','B4'];
+const botX=[80,230,380,530];
+for(let i=0;i<4;i++){
+const id=fl+'-'+botSlots[i];const r=roomData[id];if(!r)continue;
+const x=botX[i],y=240,w=140,h=130;
+const sel=selectedRoom===id;
+const isWR=botSlots[i]==='WR';
+svg+=`<rect class="${isWR?'wr-shape':'room-shape'}${sel?' selected':''}" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" onclick="selectRoom('${id}')"/>`;
+svg+=`<text class="room-label${sel?' sel':''}" x="${x+w/2}" y="${y+h/2-8}">${isWR?'WR':'CS-'+botSlots[i]}</text>`;
+svg+=`<text class="room-count" x="${x+w/2}" y="${y+h/2+8}" fill="${crowdHex(r.people)}">${r.people}p</text>`;
+svg+=`<circle class="crowd-indicator" cx="${x+w-12}" cy="${y+12}" r="5" fill="${crowdHex(r.people)}"><animate attributeName="r" values="4;6;4" dur="2s" repeatCount="indefinite"/></circle>`;
+svg+=`<rect x="${x+w/2-12}" y="${y}" width="24" height="4" fill="#dadce0" rx="1"/>`;
+}
+// Staircases
+svg+=`<rect class="stair-shape" x="20" y="180" width="55" height="60" rx="4"/>`;
+svg+=`<text class="room-label" x="47" y="208" style="font-size:8px">ST-L</text>`;
+svg+=`<text class="room-label" x="47" y="220" style="font-size:7px;fill:var(--text3)">↕</text>`;
+svg+=`<rect class="stair-shape" x="685" y="180" width="55" height="60" rx="4"/>`;
+svg+=`<text class="room-label" x="712" y="208" style="font-size:8px">ST-R</text>`;
+svg+=`<text class="room-label" x="712" y="220" style="font-size:7px;fill:var(--text3)">↕</text>`;
+svg+=`<rect class="stair-shape" x="352" y="375" width="55" height="40" rx="4"/>`;
+svg+=`<text class="room-label" x="380" y="398" style="font-size:8px">ST-C</text>`;
+}
+// Nav path
+svg+=`<path class="nav-path" id="nav-path" d=""/>`;
+svg+=`</svg>`;
+document.getElementById('map-svg-wrap').innerHTML=svg;
+}
+
+// ===== ROOM SELECTION =====
+function selectRoom(id){
+const r=roomData[id];if(!r)return;
+if(r.floor!==currentFloor){currentFloor=r.floor;updateFloorBtn();}
+selectedRoom=id;updateTime=Date.now();
+renderMap();showSheet(r);setSheetPos('half');
+}
+function showSheet(r){
+document.getElementById('sheet-default').style.display='none';
+document.getElementById('sheet-room').style.display='block';
+const lvl=crowdLvl(r.people);
+document.getElementById('sh-title').textContent=r.label;
+document.getElementById('sh-sub').textContent=r.fullName;
+const cv=document.getElementById('sh-crowd');
+cv.textContent=crowdLabel(r.people);cv.style.color=crowdColor(r.people);
+document.getElementById('sh-people').textContent=r.people+' people';
+document.getElementById('sh-temp').textContent=r.temp.toFixed(1)+'°C';
+document.getElementById('sh-temp-sub').textContent=tempDesc(r.temp);
+document.getElementById('sh-hum').textContent=r.hum+'%';
+document.getElementById('sh-hum-sub').textContent=humDesc(r.hum);
+// Directions preview
+const path=getNavPath(r);
+document.getElementById('sh-dir-wrap').innerHTML=path?`<div class="sheet-dir-row"><span class="mi" style="font-size:16px;color:var(--blue)">directions_walk</span>${path.steps.map(s=>`<span class="dir-step">${s}</span><span style="color:var(--text3)">›</span>`).join('')}<span style="font-size:12px;color:var(--text3)">~${path.time} min</span></div>`:'';
+// Capacity
+const pct=Math.min(100,Math.round(r.people/r.capacity*100));
+const cCol=pct<30?'var(--green)':pct<60?'var(--yellow)':'var(--red)';
+document.getElementById('sh-cap-wrap').innerHTML=`<div style="font-size:12px;color:var(--text2)">Capacity: ${r.capacity} · Occupancy: ${pct}%</div><div class="cap-bar-bg"><div class="cap-bar" style="width:${pct}%;background:${cCol}"></div></div>`;
+}
+function deselectRoom(){
+selectedRoom=null;renderMap();
+document.getElementById('sheet-default').style.display='block';
+document.getElementById('sheet-room').style.display='none';
+setSheetPos('peek');
+}
+
+// ===== SHEET DRAGGING =====
+const sheetEl=()=>document.getElementById('bottom-sheet');
+const peekH=110,halfH=()=>window.innerHeight*.55,fullH=()=>window.innerHeight*.92;
+function setSheetPos(state){
+sheetState=state;const sh=sheetEl();
+const h=state==='peek'?peekH:state==='half'?halfH():fullH();
+sh.style.transform=`translateY(${window.innerHeight-h}px)`;sh.style.height=h+'px';
+}
+(function initDrag(){
+let startY,startT,currentT;
+const handle=()=>document.getElementById('sheet-handle');
+document.addEventListener('pointerdown',e=>{
+if(!e.target.closest('#sheet-handle'))return;
+startY=e.clientY;startT=parseFloat(sheetEl().style.transform.replace(/[^0-9.-]/g,''))||0;
+currentT=startT;
+document.addEventListener('pointermove',onMove);
+document.addEventListener('pointerup',onUp);
+});
+function onMove(e){
+const dy=e.clientY-startY;currentT=startT+dy;
+sheetEl().style.transform=`translateY(${Math.max(0,currentT)}px)`;
+sheetEl().style.transition='none';
+}
+function onUp(){
+document.removeEventListener('pointermove',onMove);
+document.removeEventListener('pointerup',onUp);
+sheetEl().style.transition='';
+const pos=currentT;const h=window.innerHeight;
+if(pos>h*.65)setSheetPos('peek');
+else if(pos>h*.3)setSheetPos('half');
+else setSheetPos('full');
+}
+})();
+
+// ===== FLOOR SELECTOR =====
+function buildFloorPopup(){
+const pop=document.getElementById('floor-popup');
+let html='';
+for(const f of FLOORS){
+const rooms=Object.values(roomData).filter(r=>r.floor===f);
+const avg=rooms.length?Math.round(rooms.reduce((s,r)=>s+r.people,0)/rooms.length):0;
+const col=crowdHex(avg);const act=f===currentFloor?'active':'';
+html+=`<div class="floor-opt ${act}" onclick="switchFloor('${f}')"><span class="floor-dot" style="background:${col}"></span>${f==='G'?'Ground':f}</div>`;
+}
+pop.innerHTML=html;
+}
+function toggleFloorPopup(){
+const p=document.getElementById('floor-popup');
+p.classList.toggle('show');if(p.classList.contains('show'))buildFloorPopup();
+}
+function switchFloor(f){
+currentFloor=f;updateFloorBtn();
+if(selectedRoom&&roomData[selectedRoom]?.floor!==f)deselectRoom();
+renderMap();toggleFloorPopup();
+}
+function updateFloorBtn(){document.getElementById('fab-floor-btn').textContent=currentFloor==='G'?'G':currentFloor;}
+
+// ===== SEARCH =====
+function showSearch(){document.getElementById('search-screen').classList.remove('hidden');populateRoomList();document.getElementById('search-input').focus();}
+function hideSearch(){document.getElementById('search-screen').classList.add('hidden');}
+let activeFilter='all';
+function setFilter(f,el){
+activeFilter=f;
+document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+el.classList.add('active');filterRooms();
+}
+function filterRooms(){
+const q=document.getElementById('search-input').value.toLowerCase();
+const list=document.getElementById('room-list');
+let filtered=Object.values(roomData);
+if(activeFilter==='lab')filtered=filtered.filter(r=>r.slot.startsWith('T3')||r.slot.startsWith('B3'));
+if(activeFilter==='class')filtered=filtered.filter(r=>r.type==='classroom');
+if(activeFilter==='low')filtered=filtered.filter(r=>r.people<=10).sort((a,b)=>a.people-b.people);
+if(activeFilter==='wr')filtered=filtered.filter(r=>r.type==='washroom');
+if(q)filtered=filtered.filter(r=>(r.label+' '+r.floor+' '+r.name).toLowerCase().includes(q));
+renderRoomList(filtered);
+}
+function populateRoomList(){filterRooms();}
+function renderRoomList(rooms){
+const list=document.getElementById('room-list');
+list.innerHTML=rooms.map(r=>{
+const lvl=crowdLvl(r.people);const bc=lvl==='low'?'badge-low':lvl==='med'?'badge-med':'badge-high';
+const icon=r.type==='washroom'?'wc':'meeting_room';
+return`<div class="room-item" onclick="pickRoom('${r.id}')">
+<div class="room-item-icon"><span class="mi">${icon}</span></div>
+<div class="room-item-info"><div class="room-item-name">${r.label}</div><div class="room-item-sub">${r.floor} · CSE Block · ${r.people} people · ${r.temp}°C</div></div>
+<span class="room-item-badge ${bc}">${crowdLabel(r.people)}</span></div>`;
+}).join('');
+}
+function pickRoom(id){hideSearch();selectRoom(id);}
+
+// ===== NAVIGATION =====
+function getNavPath(r){
+if(!r||r.floor==='G')return null;
+const fi=parseInt(r.floor[1]);
+const isTop=r.slot.startsWith('T');const slotIdx=['T1','T2','T3','T4','B1','B2','B3',fi%2===0?'WR':'B4'].indexOf(r.slot);
+let steps=['Entry','Corridor'];
+if(fi>1)steps.push('ST-C ↑'+fi+'F');
+steps.push(r.floor+' Corridor');steps.push(r.label);
+return{steps,time:Math.max(1,fi+1)};
+}
+function startNav(){
+if(!selectedRoom)return;navMode=true;
+const r=roomData[selectedRoom];const path=getNavPath(r);if(!path)return;
+document.getElementById('nav-bar').classList.add('show');
+document.getElementById('nav-bottom').classList.add('show');
+document.getElementById('nav-bar-text').textContent=`Head to ${r.label} · ${r.floor}`;
+document.getElementById('nav-summary').textContent=`Entry → ${r.label}, ${r.floor}`;
+document.getElementById('nav-meta').textContent=`${path.steps.length} steps · ~${path.time} min · ${parseInt(r.floor[1])} floors up`;
+const icons=['login','directions_walk','stairs','directions_walk','place'];
+document.getElementById('nav-steps').innerHTML=path.steps.map((s,i)=>`<div class="nav-step"><div class="nav-step-icon"><span class="mi">${icons[i%icons.length]}</span></div><span>${s}</span></div>`).join('');
+setSheetPos('peek');drawNavPath(r);
+}
+function drawNavPath(r){
+if(!r||r.floor==='G')return;
+// Only H/V path segments
+const topX=[150,300,450,600],botX=[150,300,450,600];
+const isTop=r.slot.startsWith('T');const idx=['1','2','3','4'].indexOf(r.slot[1]);
+const roomCX=(isTop?topX:botX)[idx>=0?idx:0];
+const roomCY=isTop?115:305;const corrY=210;
+// Path: from entry(bottom) → corridor → room column → room
+let d;
+if(currentFloor===r.floor){
+// entry bottom center → corridor center → room X on corridor → room
+d=`M380,415 L380,${corrY} L${roomCX},${corrY} L${roomCX},${roomCY}`;
+}
+const np=document.getElementById('nav-path');
+if(np&&d){np.setAttribute('d',d);np.classList.add('visible');}
+}
+function exitNav(){
+navMode=false;
+document.getElementById('nav-bar').classList.remove('show');
+document.getElementById('nav-bottom').classList.remove('show');
+const np=document.getElementById('nav-path');if(np)np.classList.remove('visible');
+if(selectedRoom)setSheetPos('half');
+}
+
+// ===== DATA SIMULATION =====
+function simulate(){
+for(const r of Object.values(roomData)){
+if(r.type==='washroom')continue;
+r.people=Math.max(0,Math.min(50,r.people+Math.floor(Math.random()*5)-2));
+}
+updateTime=Date.now();updateMapCounts();updateSheetLive();updateSuggestion();
+}
+function simulateEnv(){
+for(const r of Object.values(roomData)){
+r.temp=Math.round((r.temp+(Math.random()*.4-.2))*10)/10;
+r.hum=Math.max(30,Math.min(95,r.hum+Math.floor(Math.random()*3)-1));
+}
+updateSheetLive();
+}
+function updateMapCounts(){
+for(const r of Object.values(roomData)){
+if(r.floor!==currentFloor)continue;
+const ce=document.getElementById&&document.querySelector(`text#count-${r.id}`);
+}
+renderMap();if(navMode&&selectedRoom)drawNavPath(roomData[selectedRoom]);
+}
+function updateSheetLive(){if(selectedRoom)showSheet(roomData[selectedRoom]);}
+function updateSuggestion(){
+let best=null;
+for(const f of FLOORS){
+if(f==='G')continue;
+const rooms=Object.values(roomData).filter(r=>r.floor===f);
+const avg=Math.round(rooms.reduce((s,r)=>s+r.people,0)/rooms.length);
+const avgT=(rooms.reduce((s,r)=>s+r.temp,0)/rooms.length).toFixed(1);
+if(!best||avg<best.avg)best={floor:f,avg,avgT};
+}
+if(best)document.getElementById('sug-text').innerHTML=`<b>Least crowded: ${best.floor}</b> · Avg ${best.avg} people · ${best.avgT}°C`;
+}
+
+// ===== MAP ZOOM =====
+function zoomMap(d){mapZoom=Math.max(.6,Math.min(1.8,mapZoom+d*.2));
+const svg=document.querySelector('#map-svg-wrap svg');if(svg)svg.style.transform=`scale(${mapZoom})`;}
+
+// ===== MODE TOGGLE =====
+function toggleMode(){
+isLiveMode=!isLiveMode;
+const chip=document.getElementById('mode-chip');
+const txt=document.getElementById('mode-text');
+chip.classList.toggle('live',isLiveMode);
+txt.textContent=isLiveMode?'Live':'Demo';
+if(isLiveMode)fetchLive();
+}
+function fetchLive(){
+if(!isLiveMode)return;
+fetch('http://localhost:5000/status').then(r=>r.json()).then(d=>{
+if(d&&d.rooms)for(const[id,v]of Object.entries(d.rooms))if(roomData[id])Object.assign(roomData[id],v);
+updateMapCounts();updateSheetLive();
+}).catch(()=>{});
+setTimeout(fetchLive,5000);
+}
+
+// ===== SHARE =====
+function shareRoom(){if(selectedRoom&&navigator.share)navigator.share({title:roomData[selectedRoom].label,text:`Check ${roomData[selectedRoom].label} at CSE Block LPU`}).catch(()=>{});}
+
+// ===== 360° VIEWER =====
+let panoViewer=null,panoRoomId=null;
+function open360(){
+if(!selectedRoom)return;panoRoomId=selectedRoom;
+const r=roomData[panoRoomId];
+const ov=document.getElementById('pano-overlay');ov.classList.add('show');
+document.getElementById('pano-pill').textContent=`${r.label} · ${r.floor}`;
+document.getElementById('pano-info').innerHTML=`<b>${r.label}</b> · ${r.people} people · ${r.temp}°C`;
+const container=document.getElementById('pano-container');
+if(panoViewer){panoViewer.renderer.dispose();panoViewer.scene.clear();panoViewer=null;}
+const old=container.querySelector('canvas');if(old)old.remove();
+try{
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(75,container.clientWidth/container.clientHeight,1,1100);
+camera.target=new THREE.Vector3(0,0,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(container.clientWidth,container.clientHeight);
+container.appendChild(renderer.domElement);
+const geo=new THREE.SphereGeometry(500,60,40);geo.scale(-1,1,1);
+const tex=new THREE.TextureLoader().load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/2294472375_24a3b8ef46_o.jpg');
+const mat=new THREE.MeshBasicMaterial({map:tex});
+scene.add(new THREE.Mesh(geo,mat));
+let isDown=false,lon=0,lat=0,sX=0,sY=0,sLon=0,sLat=0;
+const onD=e=>{isDown=true;const ev=e.touches?e.touches[0]:e;sX=ev.clientX;sY=ev.clientY;sLon=lon;sLat=lat;};
+const onM=e=>{if(!isDown)return;const ev=e.touches?e.touches[0]:e;lon=(sX-ev.clientX)*.15+sLon;lat=(ev.clientY-sY)*.15+sLat;};
+const onU=()=>{isDown=false;};
+renderer.domElement.addEventListener('mousedown',onD);renderer.domElement.addEventListener('mousemove',onM);
+renderer.domElement.addEventListener('mouseup',onU);renderer.domElement.addEventListener('mouseleave',onU);
+renderer.domElement.addEventListener('touchstart',onD,{passive:true});
+renderer.domElement.addEventListener('touchmove',onM,{passive:true});
+renderer.domElement.addEventListener('touchend',onU);
+let anim;function loop(){anim=requestAnimationFrame(loop);
+if(!isDown)lon+=.04;lat=Math.max(-85,Math.min(85,lat));
+const phi=THREE.MathUtils.degToRad(90-lat),theta=THREE.MathUtils.degToRad(lon);
+camera.target.set(500*Math.sin(phi)*Math.cos(theta),500*Math.cos(phi),500*Math.sin(phi)*Math.sin(theta));
+camera.lookAt(camera.target);renderer.render(scene,camera);}
+loop();
+const onR=()=>{camera.aspect=container.clientWidth/container.clientHeight;camera.updateProjectionMatrix();renderer.setSize(container.clientWidth,container.clientHeight);};
+window.addEventListener('resize',onR);
+panoViewer={renderer,scene,camera,anim,onR};
+}catch(e){
+document.getElementById('pano-container').innerHTML=`<div class="pano-msg"><span class="mi" style="font-size:64px">panorama</span><div style="font-size:16px;font-weight:500">360° Tour Unavailable</div><div>Connect to internet to view immersive tour</div><button onclick="close360()" style="margin-top:12px;padding:10px 24px;border-radius:20px;background:var(--blue);color:#fff;font-size:14px">Back to Map</button></div>`;
+}
+}
+function close360(){
+document.getElementById('pano-overlay').classList.remove('show');
+if(panoViewer){cancelAnimationFrame(panoViewer.anim);window.removeEventListener('resize',panoViewer.onR);panoViewer.renderer.dispose();panoViewer.scene.clear();panoViewer=null;}
+const c=document.getElementById('pano-container');c.querySelectorAll('canvas').forEach(x=>x.remove());
+}
+function panoMove(dir){
+if(!panoRoomId)return;
+const r=roomData[panoRoomId];const fl=r.floor;
+const slots=Object.keys(roomData).filter(k=>roomData[k].floor===fl);
+const idx=slots.indexOf(panoRoomId);
+const next=slots[(idx+dir+slots.length)%slots.length];
+close360();panoRoomId=next;selectedRoom=next;
+setTimeout(()=>{renderMap();showSheet(roomData[next]);open360();},200);
+}
+
+// ===== INIT =====
+function init(){
+renderMap();updateSuggestion();setSheetPos('peek');updateFloorBtn();
+setInterval(()=>{if(!isLiveMode)simulate();},4000);
+setInterval(()=>{if(!isLiveMode)simulateEnv();},8000);
+setInterval(()=>{
+if(selectedRoom){const ago=Math.floor((Date.now()-updateTime)/1000);
+const el=document.getElementById('sh-updated');if(el)el.textContent=`Updated ${ago}s ago · Live data`;}
+},1000);
+// Start on search screen
+document.getElementById('search-screen').classList.remove('hidden');
+populateRoomList();
+}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>

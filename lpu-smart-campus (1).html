@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a73e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>LPU Smart Campus Navigator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--blue:#007AFF;--green:#34C759;--yellow:#FFCC00;--red:#FF3B30;--text:#1c1c1e;--text2:#8e8e93;--text3:#aeaeb2;--white:#fff;--bg:#f2f2f7;--shadow:0 8px 24px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.08);--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+* { transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1); }
+html,body{height:100%;overflow:hidden;font-family:var(--font);color:var(--text);-webkit-font-smoothing:antialiased;}
+button{font-family:var(--font);cursor:pointer;border:none;background:none;outline:none;transition:transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), box-shadow 0.3s;}
+button:hover { transform: scale(1.05) translateY(-2px); }
+button:active { transform: scale(0.95); }
+.mi{font-family:'Material Icons Round';font-size:24px;color:var(--text2)}
+
+/* ===== OUTDOOR ===== */
+#outdoor{position:fixed;inset:0;z-index:10;transition:transform .4s ease, width 0.3s, height 0.3s, bottom 0.3s}
+#outdoor.exit{transform:translateY(-100%)}
+#map{width:100%;height:100%}
+
+/* ===== INDOOR ===== */
+#indoor{position:fixed;inset:0;z-index:20;background:var(--bg);transform:translateY(100%);transition:transform .4s ease, width 0.3s, height 0.3s, bottom 0.3s}
+#indoor.active{transform:translateY(0)}
+
+/* ===== SEARCH ===== */
+.search-wrap{position:fixed;top:12px;left:12px;right:12px;z-index:1000}
+.search-bar{display:flex;align-items:center;background:rgba(255,255,255,0.8);backdrop-filter:blur(20px) saturate(180%);border:1px solid rgba(255,255,255,0.4);border-radius:28px;padding:0 14px;height:48px;box-shadow:var(--shadow);gap:10px;transition:all 0.3s}
+.search-bar:focus-within{transform:scale(1.02);box-shadow:0 12px 28px rgba(0,0,0,0.15)}
+.search-bar input{flex:1;border:none;outline:none;font-size:15px;font-family:var(--font);background:transparent}
+.search-bar input::placeholder{color:var(--text3)}
+.search-results{background:var(--white);border-radius:16px;margin-top:8px;box-shadow:var(--shadow);max-height:300px;overflow-y:auto;display:none}
+.search-results.show{display:block}
+.sr-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f1f3f4;cursor:pointer}
+.sr-item:hover{background:#f8f9fa}
+.sr-icon{width:36px;height:36px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center}
+.sr-icon .mi{color:var(--blue);font-size:18px}
+.sr-info{flex:1}.sr-name{font-size:14px;font-weight:500}.sr-sub{font-size:11px;color:var(--text2)}
+.sr-badge{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff}
+
+/* ===== MODE TOGGLE ===== */
+.mode-toggle{position:fixed;top:14px;right:70px;z-index:1001;padding:5px 10px;border-radius:14px;font-size:11px;font-weight:500;background:#e8f0fe;color:var(--blue);display:flex;align-items:center;gap:4px;cursor:pointer}
+.mode-toggle .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse .8s infinite alternate}
+@keyframes pulse{to{opacity:.3}}
+
+/* ===== GOOGLE MAPS STYLE PINS ===== */
+.leaflet-marker-custom{background:none;border:none}
+.gmap-pin{position:relative;display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))}
+.gmap-pin-head{width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.8);transition:transform .2s,width .2s,height .2s}
+.gmap-pin-head .pin-icon{transform:rotate(45deg);font-family:'Material Icons Round';font-size:15px;color:#fff}
+.gmap-pin-tail{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;margin-top:-1px}
+.gmap-pin:hover .gmap-pin-head{width:40px;height:40px}
+/* Tooltip on hover */
+.gmap-tooltip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:500;color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.2);pointer-events:none;opacity:0;transition:opacity .2s;z-index:10}
+.gmap-tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:rgba(255,255,255,.97)}
+.gmap-pin:hover .gmap-tooltip{opacity:1}
+/* Crowd ring */
+.gmap-ring{position:absolute;inset:-4px;border-radius:50% 50% 50% 0;border:2px solid;opacity:.4;animation:ring-pulse 2s infinite}
+@keyframes ring-pulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.3);opacity:0}}
+
+/* ===== GPS DOT ===== */
+.gps-dot{width:16px;height:16px;background:var(--blue);border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(26,115,232,.5)}
+
+/* ===== FAB BUTTONS ===== */
+.fab-col{position:fixed;right:12px;bottom:160px;z-index:100;display:flex;flex-direction:column;gap:10px}
+.fab{width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,0.85);backdrop-filter:blur(20px) saturate(180%);border:1px solid rgba(255,255,255,0.3);box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center}
+.fab .mi{font-size:20px}
+
+/* ===== BOTTOM SHEET ===== */
+#bottom-sheet{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--white);border-radius:16px 16px 0 0;box-shadow:0 -2px 8px rgba(0,0,0,.12);transform:translateY(100%);transition:transform .35s ease;max-height:85vh;overflow-y:auto;touch-action:none}
+#bottom-sheet.show{transform:translateY(0)}
+.sheet-handle{width:100%;display:flex;justify-content:center;padding:10px 0 6px;cursor:grab}.sheet-handle:active{cursor:grabbing}.sheet-bar{width:36px;height:4px;border-radius:2px;background:#dadce0}
+.sh-head{padding:0 20px 12px}.sh-title{font-size:20px;font-weight:500}.sh-sub{font-size:13px;color:var(--text2);margin-top:2px}
+.sh-actions{display:flex;gap:16px;padding:12px 20px;border-top:1px solid #f1f3f4}
+.sh-action{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.sh-act-icon{width:42px;height:42px;border-radius:21px;background:#e8f0fe;display:flex;align-items:center;justify-content:center}
+.sh-act-icon .mi{color:var(--blue);font-size:20px}
+.sh-act-label{font-size:10px;color:var(--blue);font-weight:500}
+.sh-stats{display:flex;gap:8px;padding:12px 20px}
+.sh-stat{flex:1;padding:10px;border-radius:12px;background:#f8f9fa;text-align:center}
+.sh-stat-val{font-size:16px;font-weight:700}.sh-stat-label{font-size:10px;color:var(--text2);margin-top:2px}
+.travel-modes{display:flex;gap:8px;padding:8px 20px}
+.tm-btn{flex:1;padding:8px;border-radius:20px;text-align:center;font-size:12px;font-weight:500;border:1px solid #dadce0;color:var(--text2);transition:all .2s}
+.tm-btn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.route-info{padding:8px 20px;font-size:13px;color:var(--text2);display:flex;align-items:center;gap:8px}
+.route-info b{color:var(--text)}
+
+/* ===== NAV PANEL ===== */
+.nav-panel{padding:0 20px 16px}
+.nav-fields{display:flex;gap:8px;align-items:stretch}
+.nav-dots{display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:2px}
+.nav-dot-from{width:10px;height:10px;border-radius:50%;background:var(--blue)}
+.nav-dot-line{width:2px;flex:1;background:#dadce0}
+.nav-dot-to{width:10px;height:10px;border-radius:50%;background:var(--red)}
+.nav-inputs{flex:1;display:flex;flex-direction:column;gap:8px}
+.nav-field{display:flex;align-items:center;background:#f1f3f4;border-radius:8px;padding:10px 12px;gap:8px;cursor:pointer;position:relative}
+.nav-field .mi{font-size:18px;color:var(--text2)}
+.nav-field-text{flex:1;font-size:13px;color:var(--text);font-weight:400}
+.nav-field-text.placeholder{color:var(--text3)}
+.nav-swap{width:36px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.nav-swap .mi{font-size:20px;color:var(--text2);transition:transform .3s}
+.nav-swap:hover .mi{color:var(--blue);transform:rotate(180deg)}
+.nav-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--white);border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:10;max-height:200px;overflow-y:auto;display:none}
+.nav-dropdown.show{display:block}
+.nav-dd-item{padding:10px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f1f3f4}
+.nav-dd-item:hover{background:#f8f9fa}
+.nav-dd-item .mi{font-size:16px;color:var(--blue)}
+.nav-go{width:100%;padding:12px;border-radius:24px;background:var(--blue);color:#fff;font-size:15px;font-weight:500;margin-top:12px;font-family:var(--font);border:none;cursor:pointer;transition:background .2s}
+.nav-go:hover{background:#1557b0}
+.route-steps{padding:0 20px 12px}
+.route-step{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid #f1f3f4;font-size:12px;color:var(--text2)}
+.route-step .mi{font-size:16px;color:var(--blue);margin-top:1px}
+.route-step:last-child{border-bottom:none}
+
+/* ===== SUGGESTION CARD ===== */
+.sug-card{position:fixed;left:12px;right:66px;z-index:90;background:var(--white);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.15);padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;bottom:100px}
+.sug-icon{width:30px;height:30px;border-radius:50%;background:#e6f4ea;display:flex;align-items:center;justify-content:center}
+.sug-icon .mi{color:var(--green);font-size:16px}
+.sug-text{flex:1;font-size:12px;color:var(--text2);line-height:1.3}.sug-text b{color:var(--text);font-weight:500}
+
+/* ===== INDOOR HEADER ===== */
+.indoor-header{position:absolute;top:0;left:0;right:0;z-index:30;background:var(--white);padding:10px 12px;display:flex;align-items:center;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.indoor-header .mi{cursor:pointer}
+.ih-title{flex:1;font-size:16px;font-weight:500}
+.ih-crumb{font-size:11px;color:var(--text2);padding:0 12px 8px;background:var(--white)}
+
+/* ===== INDOOR MAP AREA ===== */
+#indoor-map{position:absolute;top:90px;left:0;right:0;bottom:0;overflow:auto;display:flex;align-items:flex-start;justify-content:center;background:var(--bg);padding:16px}
+/* vertical SVG — portrait orientation matching sketch */
+#indoor-map svg{width:auto;max-width:100%;height:auto;max-height:calc(100vh - 200px)}
+
+/* Room shapes */
+.room-shape{fill:var(--white);stroke:#dadce0;stroke-width:1.5;cursor:pointer;filter:drop-shadow(0 1px 3px rgba(0,0,0,.08));transition:all .2s}
+.room-shape:hover{fill:#e8f0fe;stroke:var(--blue);filter:drop-shadow(0 2px 8px rgba(26,115,232,.2))}
+.room-shape.sel{fill:var(--blue);stroke:var(--blue)}
+.corridor-shape{fill:#e8e8e8;stroke:#d0d0d0;stroke-width:.5}
+.stair-shape{fill:#f1f3f4;stroke:#b0b8c4;stroke-width:1}
+.wr-shape{fill:#e3f2fd;stroke:#90caf9;stroke-width:1}
+.entry-shape{fill:#e8f5e9;stroke:#66bb6a;stroke-width:1.5}
+.exit-shape{fill:#fff3e0;stroke:#ffa726;stroke-width:1.5}
+.rlabel{font-size:9px;font-weight:600;fill:var(--text);pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.rlabel.sel{fill:#fff}
+.rcount{font-size:8px;font-weight:700;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.nav-path{fill:none;stroke:var(--blue);stroke-width:3;stroke-dasharray:8 6;stroke-linecap:round;animation:dash .8s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-14}}
+
+/* ===== FLOOR SELECTOR ===== */
+.floor-sel{position:absolute;right:12px;top:100px;z-index:30;background:var(--white);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.15);padding:4px;display:flex;flex-direction:column;gap:2px}
+.fl-btn{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:500;text-align:center;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .15s}
+.fl-btn:hover{background:#f1f3f4}.fl-btn.act{background:#e8f0fe;color:var(--blue)}
+.fl-dot{width:7px;height:7px;border-radius:50%}
+.indoor-fab{position:absolute;right:12px;bottom:160px;z-index:30;display:flex;flex-direction:column;gap:10px}
+
+/* ===== NAV TOP BAR ===== */
+.nav-top{position:fixed;top:0;left:0;right:0;z-index:300;background:var(--blue);color:#fff;padding:12px 16px;display:none;align-items:center;gap:12px}
+.nav-top.show{display:flex}.nav-top .mi{color:#fff}
+.nav-top-text{flex:1;font-size:14px;font-weight:500}
+
+/* ===== 360 VIEWER ===== */
+#pano{position:fixed;inset:0;z-index:500;background:#000;display:none;transition:all 0.3s ease}
+body.split-mode #pano{display:flex;flex-direction:column;left:40%;top:0;bottom:0;right:0;border-left:2px solid #fff;box-shadow:-4px 0 15px rgba(0,0,0,0.3)}
+body.split-mode #outdoor{width:40%;right:auto}
+body.split-mode #indoor{width:40%;right:auto}
+@media(max-width:768px){
+  body.split-mode #outdoor{width:100%;height:40%;bottom:auto}
+  body.split-mode #indoor{width:100%;height:40%;bottom:auto}
+  body.split-mode #pano{left:0;top:40%;right:0;bottom:0;border-left:none;border-top:2px solid #fff;box-shadow:0 -4px 15px rgba(0,0,0,0.3)}
+}
+#pano-c{flex:1;position:relative;width:100%;height:100%}
+.pano-pin{transition:transform 0.2s}
+.pano-pin:hover { transform:scale(1.2); }
+.pano-pill{position:absolute;top:12px;left:12px;z-index:510;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);padding:8px 14px;border-radius:20px;font-size:13px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.pano-x{position:absolute;top:12px;right:12px;z-index:510;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center}
+.pano-bot{position:absolute;bottom:0;left:0;right:0;z-index:510;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.pano-nav{width:36px;height:36px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center}
+.pano-nav .mi{color:#fff;font-size:18px}
+.pano-status{position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:510;padding:4px 14px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(0,0,0,.6);color:#fff;pointer-events:none}
+
+@media(max-width:600px){.sh-stats{flex-wrap:wrap}.sh-stat{min-width:calc(50% - 6px)}}
+
+/* ===== GLASS UI ===== */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px 24px 0 0 !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  color: var(--text);
+}
+.glass-content { padding: 20px; }
+.glass-header h2 { font-size: 22px; margin-bottom: 4px; font-weight: 600; }
+.glass-header p { font-size: 14px; color: var(--text2); }
+.glass-stats { display: flex; gap: 12px; margin: 20px 0; }
+.g-stat { flex: 1; background: rgba(255,255,255,0.4); padding: 12px; border-radius: 16px; font-weight: 500; font-size: 16px; border: 1px solid rgba(255,255,255,0.2); }
+.g-stat .g-icon { font-size: 20px; margin-right: 4px; }
+.g-btn { flex: 1; padding: 14px; border-radius: 20px; font-weight: 600; font-size: 15px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.5); color: var(--text); backdrop-filter: blur(10px); transition: 0.2s; cursor: pointer; }
+.g-btn.primary { background: var(--blue); color: #fff; border: none; }
+.glass-actions { display: flex; gap: 12px; }
+
+@keyframes text-pulse {
+  0% { transform: scale(1); color: var(--text); }
+  50% { transform: scale(1.3); color: var(--red); }
+  100% { transform: scale(1); color: var(--text); }
+}
+.pulse-text { animation: text-pulse 0.4s ease; display: inline-block; }
+
+.door-pulse { animation: door-red-pulse 1.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes door-red-pulse {
+  0% { r: 2; fill: var(--red); opacity: 1; }
+  50% { r: 12; fill: var(--red); opacity: 0.5; }
+  100% { r: 2; fill: var(--red); opacity: 0; }
+}
+
+.fab-3d { background: linear-gradient(135deg, #007AFF, #5856D6) !important; color: white !important; border: none; }
+</style></head><body>
+
+<!-- OUTDOOR -->
+<div id="outdoor"><div id="map"></div></div>
+
+<!-- INDOOR -->
+<div id="indoor">
+  <div class="indoor-header">
+    <span class="mi" onclick="exitIndoor()">arrow_back</span>
+    <span class="ih-title" id="ih-title">ECE Block</span>
+    <div class="mode-toggle" style="position:relative;top:auto;right:auto" onclick="toggleMode()">
+      <span class="dot"></span><span id="mode2">Demo</span>
+    </div>
+  </div>
+  <div class="ih-crumb" id="ih-crumb">LPU Campus › ECE Block › Floor 1</div>
+  <div id="indoor-map"></div>
+  <div class="floor-sel" id="floor-sel"></div>
+  <div class="indoor-fab">
+    <button class="fab" onclick="zoomI(1)"><span class="mi">add</span></button>
+    <button class="fab" onclick="zoomI(-1)"><span class="mi">remove</span></button>
+  </div>
+  <div class="sug-card" id="sug-indoor" style="display:none">
+    <div class="sug-icon"><span class="mi">lightbulb</span></div>
+    <div class="sug-text" id="sug-in-text">Calculating...</div>
+  </div>
+</div>
+
+<!-- SEARCH -->
+<div class="search-wrap" id="search-wrap">
+  <div class="search-bar">
+    <span class="mi" style="color:var(--text3)">search</span>
+    <input id="search-in" placeholder="Search buildings, rooms..." oninput="doSearch()">
+    <span class="mi" style="color:var(--text3)">mic</span>
+  </div>
+  <div class="search-results" id="search-res"></div>
+</div>
+
+<div class="mode-toggle" id="mode-chip" onclick="toggleMode()">
+  <span class="dot"></span><span id="mode-text">Demo</span>
+</div>
+
+<!-- OUTDOOR FABS -->
+<div class="fab-col" id="fab-outdoor">
+  <button class="fab" onclick="locateMe()" title="My Location">
+    <span class="mi" style="color:var(--blue)">my_location</span>
+  </button>
+  <button class="fab" onclick="toggleMapType()" title="Map View Toggle">
+    <span class="mi">layers</span>
+  </button>
+  <button class="fab fab-3d" onclick="window.threeRenderer && window.threeRenderer.toggle()" title="3D View Toggle">
+    <span class="mi">3d_rotation</span>
+  </button>
+  <button class="fab" onclick="map.setZoom(map.getZoom()+1)"><span class="mi">add</span></button>
+  <button class="fab" onclick="map.setZoom(map.getZoom()-1)"><span class="mi">remove</span></button>
+</div>
+
+<div class="sug-card" id="sug-outdoor">
+  <div class="sug-icon"><span class="mi">lightbulb</span></div>
+  <div class="sug-text" id="sug-out-text">Analyzing campus...</div>
+</div>
+
+<!-- NAV TOP BAR -->
+<div class="nav-top" id="nav-top">
+  <button onclick="exitOutdoorNav()"><span class="mi">close</span></button>
+  <span class="nav-top-text" id="nav-top-text">Navigating...</span>
+</div>
+
+<!-- BOTTOM SHEET -->
+<div id="bottom-sheet">
+  <div class="sheet-handle"><div class="sheet-bar"></div></div>
+  <div id="sheet-body"></div>
+</div>
+
+<!-- 360 VIEWER -->
+<div id="pano">
+  <div class="pano-pill" id="pano-pill">Room</div>
+  <div class="pano-status" id="pano-status"></div>
+  <button class="pano-x" onclick="close360()"><span class="mi">close</span></button>
+  <div class="pano-bot">
+    <button class="pano-nav" onclick="panoAdj(-1)"><span class="mi">arrow_back</span></button>
+    <div style="flex:1;font-size:13px" id="pano-info">Info</div>
+    <button class="pano-nav" onclick="panoAdj(1)"><span class="mi">arrow_forward</span></button>
+  </div>
+  <div id="pano-c"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="sensor_simulation.js"></script>
+<script src="panorama_viewer.js"></script>
+<script src="glass_ui.js"></script>
+<script src="three_renderer.js"></script>
+<script>
+// ===== LPU DATA =====
+const LPU_CENTER=[31.2545, 75.7055];
+const MAIN_GATE=[31.2597979, 75.706087];
+const BUILDINGS=[
+  {id:'b0',name:'LPU Baldev Raj Mittal Park',lat:31.259039,lng:75.706869,icon:'park',color:'#34a853',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'},
+  {id:'b1',name:'Sh. Baldevraj Mittal Auditorium',lat:31.258480,lng:75.707818,icon:'theater_comedy',color:'#8e24aa',floors:3,rooms:15,hasIndoor:false,cat:'academic'},
+  {id:'b2',name:'School of Fashion Design',lat:31.258764,lng:75.708881,icon:'design_services',color:'#e91e63',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b3',name:'Uni Health Center',lat:31.258053,lng:75.706944,icon:'local_hospital',color:'#ea4335',floors:2,rooms:20,hasIndoor:false,cat:'facility'},
+  {id:'b4',name:'Sunken Ground',lat:31.258026,lng:75.707443,icon:'sports_volleyball',color:'#34a853',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'},
+  {id:'b5',name:'Lovely Institute Of International Studies',lat:31.258094,lng:75.706896,icon:'public',color:'#1a73e8',floors:4,rooms:35,hasIndoor:false,cat:'academic'},
+  {id:'b6',name:'School of Architecture, Planning and Design',lat:31.257072,lng:75.707212,icon:'architecture',color:'#ff6d00',floors:5,rooms:40,hasIndoor:false,cat:'academic'},
+  {id:'b7',name:'Shri Baldev Raj Mittal Hospital',lat:31.256691,lng:75.707078,icon:'local_hospital',color:'#ea4335',floors:4,rooms:50,hasIndoor:false,cat:'facility'},
+  {id:'b8',name:'Product and Industrial Block',lat:31.256659,lng:75.706735,icon:'precision_manufacturing',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b9',name:'Security Office',lat:31.256866,lng:75.705227,icon:'security',color:'#546e7a',floors:1,rooms:5,hasIndoor:false,cat:'admin'},
+  {id:'b10',name:'Uni Mall',lat:31.255852,lng:75.705458,icon:'local_mall',color:'#fb8c00',floors:3,rooms:40,hasIndoor:false,cat:'shopping'},
+  {id:'b11',name:'LPU Mall',lat:31.255751,lng:75.704906,icon:'shopping_bag',color:'#fb8c00',floors:3,rooms:35,hasIndoor:false,cat:'shopping'},
+  {id:'b12',name:'Division of Student Welfare',lat:31.255192,lng:75.706295,icon:'people',color:'#00897b',floors:3,rooms:20,hasIndoor:false,cat:'admin'},
+  {id:'b13',name:'Lovely Professional University',lat:31.255531,lng:75.704879,icon:'school',color:'#1a73e8',floors:5,rooms:60,hasIndoor:false,cat:'academic'},
+  {id:'b14',name:'LPU School of Hotel Management',lat:31.255681,lng:75.704352,icon:'restaurant',color:'#f57c00',floors:3,rooms:25,hasIndoor:false,cat:'academic'},
+  {id:'b15',name:'LPU 18 Block Humanities',lat:31.255239,lng:75.703707,icon:'menu_book',color:'#6d4c41',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b16',name:'Baldev Raj Mittal UniPolis',lat:31.255163,lng:75.704614,icon:'apartment',color:'#455a64',floors:6,rooms:80,hasIndoor:false,cat:'residential'},
+  {id:'b17',name:'Department of Education, LPU',lat:31.255192,lng:75.703406,icon:'school',color:'#1a73e8',floors:3,rooms:20,hasIndoor:false,cat:'academic'},
+  {id:'b18',name:'STATE BANK OF INDIA ATM',lat:31.255338,lng:75.705914,icon:'atm',color:'#1565c0',floors:1,rooms:1,hasIndoor:false,cat:'facility'},
+  {id:'b19',name:'Mittal School of Business Block 14',lat:31.254541,lng:75.705445,icon:'business',color:'#283593',floors:6,rooms:60,hasIndoor:false,cat:'academic'},
+  {id:'b20',name:'Urban Spido Park',lat:31.254033,lng:75.705737,icon:'park',color:'#388e3c',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'},
+  {id:'b21',name:'Late Mrs. Mittal Samadhi',lat:31.253347,lng:75.704851,icon:'place',color:'#795548',floors:1,rooms:0,hasIndoor:false,cat:'landmark'},
+  {id:'b22',name:'Robo Park LPU',lat:31.253468,lng:75.703337,icon:'smart_toy',color:'#00bcd4',floors:1,rooms:5,hasIndoor:false,cat:'outdoor'},
+  {id:'b23',name:'School Of Biosciences',lat:31.253256,lng:75.703871,icon:'biotech',color:'#43a047',floors:4,rooms:35,hasIndoor:false,cat:'academic'},
+  {id:'b24',name:'LPU School of Law',lat:31.254583,lng:75.701158,icon:'gavel',color:'#6d4c41',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b25',name:'Block 25',lat:31.252912,lng:75.702520,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:true,cat:'academic'},
+  {id:'b26',name:'Block 26',lat:31.252861,lng:75.702917,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:true,cat:'academic'},
+  {id:'b27',name:'Gupta Canteen',lat:31.252678,lng:75.702829,icon:'restaurant',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b28',name:'LPU Alumni Association',lat:31.252160,lng:75.704740,icon:'groups',color:'#0288d1',floors:2,rooms:10,hasIndoor:false,cat:'admin'},
+  {id:'b29',name:'Division of Student Relationship',lat:31.252043,lng:75.704636,icon:'support_agent',color:'#00897b',floors:3,rooms:20,hasIndoor:false,cat:'admin'},
+  {id:'b30',name:'LPU Main Parking',lat:31.252848,lng:75.705694,icon:'local_parking',color:'#546e7a',floors:1,rooms:0,hasIndoor:false,cat:'facility'},
+  {id:'b31',name:'Division of Admissions, LPU',lat:31.252772,lng:75.704674,icon:'how_to_reg',color:'#0288d1',floors:3,rooms:15,hasIndoor:false,cat:'admin'},
+  {id:'b32',name:'Talk of the Town (Blk 34 Level 6)',lat:31.251632,lng:75.704707,icon:'local_cafe',color:'#6d4c41',floors:6,rooms:40,hasIndoor:false,cat:'facility'},
+  {id:'b33',name:'School of Electronics & Electrical Engineering',lat:31.251694,lng:75.704108,icon:'electrical_services',color:'#f57f17',floors:5,rooms:45,hasIndoor:true,cat:'academic'},
+  {id:'b34',name:'LPU Block 36',lat:31.251599,lng:75.704132,icon:'business',color:'#5c6bc0',floors:6,rooms:50,hasIndoor:true,cat:'academic'},
+  {id:'b35',name:'LPU School of Computer Science & Engineering',lat:31.251333,lng:75.704771,icon:'computer',color:'#1a73e8',floors:6,rooms:48,hasIndoor:true,cat:'academic'},
+  {id:'b36',name:'Block 32, Division of Career Services',lat:31.252053,lng:75.704817,icon:'work',color:'#00897b',floors:4,rooms:30,hasIndoor:true,cat:'admin'},
+  {id:'b37',name:'LPU Innovation Studio Block 39',lat:31.251146,lng:75.705430,icon:'lightbulb',color:'#fbc02d',floors:3,rooms:20,hasIndoor:false,cat:'academic'},
+  {id:'b38',name:'FOODIBLES INDIA',lat:31.250995,lng:75.704931,icon:'fastfood',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b39',name:'Boys Apartment 41-A',lat:31.251661,lng:75.701971,icon:'hotel',color:'#455a64',floors:6,rooms:100,hasIndoor:false,cat:'residential'},
+  {id:'b40',name:'Lovely Bake Studio',lat:31.251585,lng:75.701969,icon:'cake',color:'#e91e63',floors:1,rooms:3,hasIndoor:false,cat:'food'},
+  {id:'b41',name:'GREEN AND PROTEIN',lat:31.252243,lng:75.701966,icon:'local_dining',color:'#43a047',floors:1,rooms:3,hasIndoor:false,cat:'food'},
+  {id:'b42',name:'PROTEIN HOUSE',lat:31.252342,lng:75.701947,icon:'fitness_center',color:'#00897b',floors:1,rooms:3,hasIndoor:false,cat:'food'},
+  {id:'b43',name:'Buzz Restaurant LPU',lat:31.252240,lng:75.701943,icon:'restaurant',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b44',name:'WHSmith Store',lat:31.251622,lng:75.702167,icon:'store',color:'#5c6bc0',floors:1,rooms:3,hasIndoor:false,cat:'shopping'},
+  {id:'b45',name:'41-D Block',lat:31.251747,lng:75.701049,icon:'apartment',color:'#455a64',floors:5,rooms:80,hasIndoor:false,cat:'residential'},
+  {id:'b46',name:'Southern Central Mess',lat:31.252132,lng:75.700820,icon:'dining',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b47',name:'Shooting Range LPU',lat:31.251260,lng:75.701608,icon:'sports',color:'#546e7a',floors:1,rooms:5,hasIndoor:false,cat:'sports'},
+  {id:'b48',name:'LPU College Gym',lat:31.250893,lng:75.700834,icon:'fitness_center',color:'#e53935',floors:2,rooms:10,hasIndoor:false,cat:'sports'},
+  {id:'b49',name:'Sports Centre, LPU',lat:31.250897,lng:75.702282,icon:'stadium',color:'#2e7d32',floors:3,rooms:20,hasIndoor:false,cat:'sports'},
+  {id:'b50',name:'Indoor Playground cum Stadium',lat:31.250522,lng:75.701532,icon:'sports_basketball',color:'#f57c00',floors:2,rooms:15,hasIndoor:false,cat:'sports'},
+  {id:'b51',name:'XL Arena (Box Cricket & Football Turf)',lat:31.250049,lng:75.701717,icon:'sports_soccer',color:'#2e7d32',floors:1,rooms:0,hasIndoor:false,cat:'sports'},
+  {id:'b52',name:'BH2',lat:31.249742,lng:75.701073,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b53',name:'BH-3',lat:31.249638,lng:75.700202,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b54',name:'NORTH EAST KITCHEN',lat:31.249320,lng:75.701494,icon:'restaurant',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b55',name:'Govind Food Corner',lat:31.249311,lng:75.701882,icon:'local_dining',color:'#f57c00',floors:1,rooms:3,hasIndoor:false,cat:'food'},
+  {id:'b56',name:'BH-5,6 WAY',lat:31.249026,lng:75.701735,icon:'hotel',color:'#455a64',floors:6,rooms:240,hasIndoor:false,cat:'residential'},
+  {id:'b57',name:'BH-4',lat:31.248602,lng:75.699578,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b58',name:'Food Factory',lat:31.247926,lng:75.698666,icon:'fastfood',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b59',name:'LPU Cricket Ground',lat:31.247782,lng:75.701001,icon:'sports_cricket',color:'#2e7d32',floors:1,rooms:0,hasIndoor:false,cat:'sports'},
+  {id:'b60',name:'Basketball Court LPU',lat:31.248639,lng:75.702197,icon:'sports_basketball',color:'#f57c00',floors:1,rooms:0,hasIndoor:false,cat:'sports'},
+  {id:'b61',name:'Volley Ball Court',lat:31.247860,lng:75.701848,icon:'sports_volleyball',color:'#2e7d32',floors:1,rooms:0,hasIndoor:false,cat:'sports'},
+  {id:'b62',name:'LPU Football Ground',lat:31.246917,lng:75.702121,icon:'sports_soccer',color:'#2e7d32',floors:1,rooms:0,hasIndoor:false,cat:'sports'},
+  {id:'b63',name:'SDN Ground',lat:31.247848,lng:75.702781,icon:'sports',color:'#388e3c',floors:1,rooms:0,hasIndoor:false,cat:'sports'},
+  {id:'b64',name:'BH 5',lat:31.248669,lng:75.703607,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b65',name:'BH 6',lat:31.248394,lng:75.704111,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b66',name:'N.K Food Court',lat:31.247077,lng:75.704701,icon:'restaurant',color:'#f57c00',floors:1,rooms:5,hasIndoor:false,cat:'food'},
+  {id:'b67',name:'School of Mechanical Engineering (Block 55)',lat:31.247229,lng:75.703570,icon:'engineering',color:'#bf360c',floors:5,rooms:45,hasIndoor:false,cat:'academic'},
+  {id:'b68',name:'School of Civil Engineering (Building 56)',lat:31.246653,lng:75.704075,icon:'construction',color:'#6d4c41',floors:5,rooms:40,hasIndoor:false,cat:'academic'},
+  {id:'b69',name:'School Of Bio Engineering & Biosciences',lat:31.246762,lng:75.703520,icon:'biotech',color:'#2e7d32',floors:4,rooms:35,hasIndoor:false,cat:'academic'},
+  {id:'b70',name:'Polytechnic College LPU',lat:31.246505,lng:75.703612,icon:'school',color:'#1565c0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b71',name:'School Of Agriculture (LPU Block 57)',lat:31.246273,lng:75.703632,icon:'agriculture',color:'#388e3c',floors:3,rooms:25,hasIndoor:false,cat:'academic'},
+  {id:'b72',name:'LPU Agriculture Field Classrooms',lat:31.245358,lng:75.700778,icon:'nature',color:'#388e3c',floors:1,rooms:5,hasIndoor:false,cat:'outdoor'},
+  {id:'b73',name:'LPU Dairy Farm',lat:31.243846,lng:75.700787,icon:'grass',color:'#558b2f',floors:1,rooms:5,hasIndoor:false,cat:'outdoor'},
+  {id:'b74',name:'BH-8',lat:31.249157,lng:75.707075,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b75',name:'BH-9',lat:31.249064,lng:75.707961,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b76',name:'BH-10',lat:31.248382,lng:75.707990,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b77',name:'GH-7',lat:31.251433,lng:75.702568,icon:'hotel',color:'#ad1457',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b78',name:'GH-5,6',lat:31.253408,lng:75.700976,icon:'hotel',color:'#ad1457',floors:6,rooms:240,hasIndoor:false,cat:'residential'},
+  {id:'b79',name:'GH-1,2,3,4',lat:31.256166,lng:75.705050,icon:'hotel',color:'#ad1457',floors:6,rooms:480,hasIndoor:false,cat:'residential'},
+  {id:'b80',name:'BH1',lat:31.251415,lng:75.700311,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b81',name:'LPU MAIN GATE PARKING',lat:31.259910,lng:75.706161,icon:'local_parking',color:'#546e7a',floors:1,rooms:0,hasIndoor:false,cat:'facility'},
+  {id:'b82',name:'CAR PARKING',lat:31.259727,lng:75.705581,icon:'local_parking',color:'#546e7a',floors:1,rooms:0,hasIndoor:false,cat:'facility'},
+  {id:'b83',name:'LPU Helipad',lat:31.254265,lng:75.703190,icon:'flight_takeoff',color:'#b71c1c',floors:1,rooms:0,hasIndoor:false,cat:'facility'},
+  {id:'b84',name:'LPU MAIN GATE',lat:31.260618,lng:75.706749,icon:'door_front',color:'#1a73e8',floors:1,rooms:0,hasIndoor:false,cat:'landmark'},
+  {id:'b85',name:'Shanti Devi Mittal Auditorium',lat:31.252107381901137,lng:75.70410112885413,icon:'theater_comedy',color:'#8e24aa',floors:3,rooms:15,hasIndoor:false,cat:'academic'},
+  {id:'b86',name:'Block 27',lat:31.252701933583186,lng:75.703334413951,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b87',name:'Block 28',lat:31.25283534466282,lng:75.703721163956,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b88',name:'Landscape nursery',lat:31.25012423806693,lng:75.69819693774699,icon:'eco',color:'#388e3c',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'},
+  {id:'b89',name:'BH-7',lat:31.2495383711864,lng:75.69823425572993,icon:'hotel',color:'#455a64',floors:6,rooms:120,hasIndoor:false,cat:'residential'},
+  {id:'b90',name:'Block 33',lat:31.251785198677215,lng:75.70486506754669,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b91',name:'Block 34',lat:31.251471968881816,lng:75.70478025394911,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b92',name:'Mechanical link road',lat:31.24819438163234,lng:75.70226962954393,icon:'add_road',color:'#757575',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'},
+  {id:'b93',name:'Agriculture block link road',lat:31.2469511102797,lng:75.70137242303585,icon:'add_road',color:'#757575',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'},
+  {id:'b94',name:'Central Library',lat:31.25184318995318,lng:75.70361097449147,icon:'local_library',color:'#8e24aa',floors:5,rooms:40,hasIndoor:false,cat:'academic'},
+  {id:'b95',name:'Block 38',lat:31.25211911554306,lng:75.70326378935422,icon:'business',color:'#5c6bc0',floors:4,rooms:30,hasIndoor:false,cat:'academic'},
+  {id:'b96',name:'Way to BH-8,9,10',lat:31.250365407069992,lng:75.70500139989687,icon:'add_road',color:'#757575',floors:1,rooms:0,hasIndoor:false,cat:'outdoor'}
+];
+
+const PANO_LOCATIONS = [
+  {id:'p1', name:'Back Gate', lat:31.252750, lng:75.702850, url:'360photos/26_back_gate_360.jpg'},
+  {id:'p2', name:'Front Gate', lat:31.252950, lng:75.702950, url:'360photos/26_front_360.jpg'},
+  {id:'p3', name:'Classroom', lat:31.251400, lng:75.704700, url:'360photos/classroom_360.jpg'},
+  {id:'p4', name:'Robopark LPU', lat:31.253468, lng:75.703337, url:'360photos/Robopark_360.jpg'},
+  {id:'p5', name:'Boys Apartment 41-A Gate', lat:31.251661, lng:75.701971, url:'360photos/Appartment_gate_360.jpg'}
+];
+
+// ===== ROOM DATA =====
+const FLOORS=['G','F1','F2','F3','F4','F5','F6'];
+const roomData={};
+const SLOT_NUM={T1:'01',T2:'02',T3:'03',T4:'04',B1:'05',B2:'06',B3:'07',B4:'08',WR:'08'};
+const initD={
+  F1:{T1:{p:18,t:31,h:72},T2:{p:6,t:28,h:63},T3:{p:24,t:33,h:75},T4:{p:4,t:27,h:60},B1:{p:12,t:29,h:68},B2:{p:20,t:30,h:70},B3:{p:8,t:27,h:62},B4:{p:3,t:26,h:58}},
+  F2:{T1:{p:15,t:30,h:70},T2:{p:9,t:27,h:61},T3:{p:22,t:32,h:74},T4:{p:5,t:26,h:59},B1:{p:11,t:28,h:65},B2:{p:7,t:27,h:60},B3:{p:19,t:31,h:71},WR:{p:0,t:25,h:80}},
+  F3:{T1:{p:20,t:32,h:73},T2:{p:14,t:29,h:65},T3:{p:6,t:27,h:60},T4:{p:25,t:34,h:76},B1:{p:3,t:25,h:55},B2:{p:17,t:30,h:69},B3:{p:9,t:28,h:63},B4:{p:13,t:29,h:66}},
+  F4:{T1:{p:8,t:27,h:61},T2:{p:21,t:31,h:72},T3:{p:4,t:26,h:57},T4:{p:16,t:30,h:68},B1:{p:24,t:33,h:75},B2:{p:2,t:24,h:52},B3:{p:11,t:28,h:64},WR:{p:0,t:25,h:82}},
+  F5:{T1:{p:7,t:27,h:60},T2:{p:18,t:31,h:71},T3:{p:13,t:29,h:65},T4:{p:22,t:32,h:74},B1:{p:5,t:26,h:58},B2:{p:9,t:28,h:62},B3:{p:16,t:30,h:69},B4:{p:1,t:24,h:53}},
+  F6:{T1:{p:12,t:29,h:66},T2:{p:4,t:25,h:56},T3:{p:19,t:31,h:72},T4:{p:8,t:27,h:61},B1:{p:14,t:30,h:68},B2:{p:23,t:33,h:75},B3:{p:6,t:26,h:59},WR:{p:0,t:25,h:83}}
+};
+for(const fl of FLOORS){
+  if(fl==='G')continue;
+  const fi=+fl[1],isE=fi%2===0;
+  const slots=isE?['T1','T2','T3','T4','B1','B2','B3','WR']:['T1','T2','T3','T4','B1','B2','B3','B4'];
+  for(const s of slots){
+    const id=fl+'-'+s,d=initD[fl][s],tp=s==='WR'?'washroom':'classroom';
+    const rn=s==='WR'?'WR':`ECE-${fi}${SLOT_NUM[s]}`;
+    roomData[id]={id,floor:fl,slot:s,label:rn,type:tp,people:d.p,temp:d.t,hum:d.h,cap:60};
+  }
+}
+
+// ===== HELPERS =====
+const cLvl=n=>n<=10?'low':n<=25?'med':'high';
+const cLabel=n=>n<=10?'LOW':n<=25?'MEDIUM':'HIGH';
+const cHex=n=>n<=10?'#34a853':n<=25?'#fbbc04':'#ea4335';
+const cCol=n=>cLvl(n)==='low'?'var(--green)':cLvl(n)==='med'?'var(--yellow)':'var(--red)';
+const tDesc=t=>t<27?'Cool':t<30?'Comfortable':t<33?'Warm':'Hot';
+
+let map,userPos=null,userMarker=null,routeLine=null,curFloor='F1',selRoom=null,indoorMode=false,liveMode=false,iZoom=1,panoV=null,panoRoom=null,curMapLayer=null,isSat=true;
+let geoWatchId=null;
+
+// ===== LEAFLET MAP with GOOGLE MAPS PIN MARKERS =====
+function initMap(){
+  map=L.map('map',{zoomControl:false,minZoom:15,maxZoom:19}).setView(LPU_CENTER,17);
+  curMapLayer=L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20,attribution:'© Google'}).addTo(map);
+
+  BUILDINGS.forEach(b=>{
+    const avg=b.hasIndoor?Math.round(Object.values(roomData).reduce((s,r)=>s+r.people,0)/Object.values(roomData).length):Math.floor(Math.random()*20);
+    const dot=cHex(avg);
+    const pinColor=b.color||'#1a73e8';
+    const pinBorder=dot; // crowd color ring
+
+    // Build Google Maps-style teardrop pin SVG
+    const pinSvg=`
+      <svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
+        <filter id="ps${b.id}"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/></filter>
+        <path d="M15,0 C6.72,0 0,6.72 0,15 C0,26.25 15,42 15,42 C15,42 30,26.25 30,15 C30,6.72 23.28,0 15,0 Z"
+          fill="${pinColor}" filter="url(#ps${b.id})"/>
+        <circle cx="15" cy="15" r="9" fill="rgba(255,255,255,0.25)"/>
+        <text x="15" y="20" text-anchor="middle" font-family="Material Icons Round" font-size="13" fill="#fff">${iconToUnicode(b.icon)}</text>
+      </svg>`;
+
+    const icon=L.divIcon({
+      className:'leaflet-marker-custom',
+      html:`<div class="gmap-pin" title="${b.name}">
+        <div style="position:relative">
+          ${pinSvg}
+        </div>
+        <div class="gmap-tooltip">${b.name}</div>
+      </div>`,
+      iconSize:[30,42],
+      iconAnchor:[15,42],
+      popupAnchor:[0,-42]
+    });
+    const m=L.marker([b.lat,b.lng],{icon}).addTo(map);
+    m.on('click',()=>showBuildingSheet(b));
+    b.marker=m;
+  });
+
+  // Add 360° Photo Markers
+  PANO_LOCATIONS.forEach(p => {
+    const icon = L.divIcon({
+      className:'leaflet-marker-custom',
+      html:`<div class="pano-pin" title="${p.name} 360°" style="background:#1a73e8; border:2px solid #fff; width:24px; height:24px; border-radius:50%; box-shadow:0 2px 6px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; cursor:pointer;"><span class="mi" style="color:#fff; font-size:14px;">360</span></div>`,
+      iconSize:[24,24],
+      iconAnchor:[12,12]
+    });
+    const m = L.marker([p.lat, p.lng], {icon, zIndexOffset:500}).addTo(map);
+    m.on('click', () => openStreetView(p));
+  });
+
+  startGpsTracking();
+}
+
+// Material icon codepoint lookup (subset)
+function iconToUnicode(name){
+  const map2={
+    'park':'e8f8','sports_volleyball':'e65b','theater_comedy':'e9ce','design_services':'f10a',
+    'local_hospital':'e548','public':'e80b','architecture':'ea3b','precision_manufacturing':'f049',
+    'security':'e32a','local_mall':'e54c','shopping_bag':'f1cc','people':'e7fb',
+    'school':'e80c','restaurant':'e56c','menu_book':'e613','apartment':'ea40',
+    'electrical_services':'f102','computer':'e30a','work':'e8f9','lightbulb':'e0f0',
+    'fastfood':'e57a','hotel':'e549','cake':'e7bc','local_dining':'e2f4','fitness_center':'e52e',
+    'dining':'ead5','sports':'ea30','stadium':'eb81','sports_basketball':'ea26',
+    'sports_soccer':'ea43','engineering':'ea3d','construction':'ea3c','biotech':'ea3a',
+    'agriculture':'ea79','nature':'ec2a','grass':'f205','gavel':'e90e','groups':'f233',
+    'support_agent':'f0e2','how_to_reg':'e174','local_cafe':'e541','atm':'e1f2',
+    'local_parking':'e54f','flight_takeoff':'e1d9','door_front':'f1f5','place':'e55f',
+    'business':'e0af','smart_toy':'f07b','store':'e8d1','sports_cricket':'ea27'
+  };
+  const code=map2[name]||'e55f';
+  return String.fromCodePoint(parseInt(code,16));
+}
+
+function startGpsTracking(){
+  if(!navigator.geolocation){userPos=[...LPU_CENTER];return;}
+  if(geoWatchId)navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId=navigator.geolocation.watchPosition(p=>{
+    userPos=[p.coords.latitude,p.coords.longitude];
+    const icon=L.divIcon({className:'leaflet-marker-custom',html:'<div class="gps-dot"></div>',iconSize:[16,16],iconAnchor:[8,8]});
+    if(userMarker){userMarker.setLatLng(userPos);userMarker.setIcon(icon);}
+    else{userMarker=L.marker(userPos,{icon,zIndexOffset:1000}).addTo(map);}
+  },()=>{userPos=[...LPU_CENTER];},{enableHighAccuracy:true,maximumAge:5000,timeout:10000});
+}
+function locateMe(){if(userPos){map.flyTo(userPos,18);}else{map.flyTo(LPU_CENTER,17);}}
+function toggleMapType(){
+  if(curMapLayer)map.removeLayer(curMapLayer);
+  isSat=!isSat;
+  if(isSat){curMapLayer=L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20}).addTo(map);}
+  else{curMapLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);}
+}
+
+// ===== BUILDING SHEET =====
+function showBuildingSheet(b){
+  if(window.glassUI) window.glassUI.showBuilding(b);
+}
+function getECEAvg(){const rs=Object.values(roomData).filter(r=>r.type!=='washroom');return Math.round(rs.reduce((s,r)=>s+r.people,0)/rs.length);}
+function openSheet(){ if(window.glassUI) window.glassUI.expand(); }
+function closeSheet(){
+  if(window.glassUI) window.glassUI.hide();
+  if (!routeLine) {
+    document.getElementById('exit-nav-bar').style.display = 'none';
+  }
+}
+
+// ===== OUTDOOR NAVIGATION =====
+let navFrom={type:'gate',name:'Main Gate',coords:[...MAIN_GATE]},navTo=null,navMode='foot';
+function navToBuilding(bid){
+  closeSheet();
+  const b=BUILDINGS.find(x=>x.id===bid);if(!b)return;
+  navTo={type:'building',name:b.name,coords:[b.lat,b.lng],bid:b.id};
+  navFrom={type:'gate',name:'Main Gate',coords:[...MAIN_GATE]};
+  navMode='foot';
+  showNavPanel();
+}
+function showNavPanel(){
+  const fromName=navFrom.name||'Choose start';
+  const toName=navTo?navTo.name:'Choose destination';
+  const bldOpts=BUILDINGS.map(b=>`<div class="nav-dd-item" onclick="pickNavPoint('from','building','${b.id}')"><span class="mi">${b.icon}</span>${b.name}</div>`).join('');
+  const bldOptsTo=BUILDINGS.map(b=>`<div class="nav-dd-item" onclick="pickNavPoint('to','building','${b.id}')"><span class="mi">${b.icon}</span>${b.name}</div>`).join('');
+  const html=`<div class="sh-head"><div class="sh-title">Plan your route</div><div class="sh-sub">Choose start and destination</div></div>
+  <div class="nav-panel"><div class="nav-fields">
+  <div class="nav-dots"><div class="nav-dot-from"></div><div class="nav-dot-line"></div><div class="nav-dot-to"></div></div>
+  <div class="nav-inputs">
+  <div class="nav-field" onclick="toggleNavDD('from-dd')">
+    <span class="mi">${navFrom.type==='gps'?'my_location':'door_front'}</span>
+    <span class="nav-field-text">${fromName}</span><span class="mi" style="font-size:14px">expand_more</span>
+    <div class="nav-dropdown" id="from-dd">
+      <div class="nav-dd-item" onclick="pickNavPoint('from','gps')"><span class="mi">my_location</span>📍 My Current Location</div>
+      <div class="nav-dd-item" onclick="pickNavPoint('from','gate')"><span class="mi">door_front</span>🚪 Main Gate</div>
+      ${bldOpts}
+    </div>
+  </div>
+  <div class="nav-field" onclick="toggleNavDD('to-dd')">
+    <span class="mi">place</span>
+    <span class="nav-field-text">${toName}</span><span class="mi" style="font-size:14px">expand_more</span>
+    <div class="nav-dropdown" id="to-dd">${bldOptsTo}</div>
+  </div>
+  </div>
+  <div class="nav-swap" onclick="swapNav()"><span class="mi">swap_vert</span></div>
+  </div>
+  <div class="travel-modes">
+    <button class="tm-btn${navMode==='foot'?' active':''}" onclick="navMode='foot';execRoute(this)">🚶 Walk</button>
+    <button class="tm-btn${navMode==='bike'?' active':''}" onclick="navMode='bike';execRoute(this)">🚲 Cycle</button>
+    <button class="tm-btn${navMode==='car'?' active':''}" onclick="navMode='car';execRoute(this)">🚗 Drive</button>
+  </div>
+  <div class="route-info" id="route-info">Tap GO to calculate route</div>
+  <div id="route-steps" class="route-steps"></div>
+  <button class="nav-go" onclick="execRoute()">GO</button>
+  <button onclick="closeSheet();exitOutdoorNav()" style="width:100%;padding:10px;border-radius:24px;background:#f1f3f4;font-size:14px;font-weight:500;color:var(--text);margin-top:8px;border:none;cursor:pointer;font-family:var(--font)">Cancel</button>
+  </div>`;
+  document.getElementById('sheet-body').innerHTML=html;openSheet();
+}
+function toggleNavDD(id){event.stopPropagation();document.querySelectorAll('.nav-dropdown').forEach(d=>{if(d.id!==id)d.classList.remove('show');});document.getElementById(id).classList.toggle('show');}
+function pickNavPoint(dir,type,bid){
+  event.stopPropagation();document.querySelectorAll('.nav-dropdown').forEach(d=>d.classList.remove('show'));
+  if(type==='gps'){const c=userPos||[...LPU_CENTER];if(dir==='from')navFrom={type:'gps',name:'My Location',coords:c};else navTo={type:'gps',name:'My Location',coords:c};}
+  else if(type==='gate'){if(dir==='from')navFrom={type:'gate',name:'Main Gate',coords:[...MAIN_GATE]};else navTo={type:'gate',name:'Main Gate',coords:[...MAIN_GATE]};}
+  else if(type==='building'){const b=BUILDINGS.find(x=>x.id===bid);if(b){if(dir==='from')navFrom={type:'building',name:b.name,coords:[b.lat,b.lng],bid:b.id};else navTo={type:'building',name:b.name,coords:[b.lat,b.lng],bid:b.id};}}
+  showNavPanel();
+}
+function swapNav(){const tmp=navFrom;navFrom=navTo||{type:'gate',name:'Main Gate',coords:[...MAIN_GATE]};navTo=tmp;showNavPanel();}
+function execRoute(btn){
+  if(btn){document.querySelectorAll('.tm-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+  if(!navFrom||!navTo){document.getElementById('route-info').innerHTML='<span style="color:var(--red)">Select both start and destination</span>';return;}
+  const profile=navMode==='foot'?'foot':navMode==='bike'?'bike':'car';
+  const modeLabel=navMode==='foot'?'🚶 Walk':navMode==='bike'?'🚲 Cycle':'🚗 Drive';
+  const s=navFrom.coords,e=navTo.coords;
+  const snapS=[s[0]>31.2595?31.2585:s[0],s[0]>31.2595?75.7065:s[1]];
+  const snapE=[e[0]>31.2595?31.2585:e[0],e[0]>31.2595?75.7065:e[1]];
+  const url=`https://router.project-osrm.org/route/v1/${profile}/${snapS[1]},${snapS[0]};${snapE[1]},${snapE[0]}?overview=full&geometries=geojson&steps=true`;
+  document.getElementById('route-info').innerHTML='<span style="color:var(--text3)">Calculating route...</span>';
+  fetch(url).then(r=>r.json()).then(data=>{
+    if(data.routes&&data.routes[0]){
+      const coords=data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+      if(routeLine)map.removeLayer(routeLine);
+      routeLine=L.polyline(coords,{color:'#1a73e8',weight:5,opacity:.85}).addTo(map);
+      map.fitBounds(routeLine.getBounds(),{padding:[60,60]});
+      const dist=data.routes[0].distance,dur=data.routes[0].duration;
+      const distStr=dist>1000?(dist/1000).toFixed(1)+' km':Math.round(dist)+' m';
+      const durStr=Math.max(1,Math.round(dur/60))+' min';
+      document.getElementById('route-info').innerHTML=`<b>${modeLabel} · ${distStr} · ${durStr}</b>`;
+      document.getElementById('nav-top').classList.add('show');
+      document.getElementById('nav-top-text').textContent=`${modeLabel} to ${navTo.name} · ${durStr}`;
+      
+      document.getElementById('exit-nav-bar').style.display = 'flex';
+      document.getElementById('exit-nav-bar').querySelector('.exit-dest').textContent = navTo.name;
+      document.getElementById('exit-nav-bar').querySelector('.exit-eta').textContent = durStr;
+
+      const legs=data.routes[0].legs;let stepsHtml='';
+      if(legs&&legs[0]&&legs[0].steps){
+        legs[0].steps.forEach((st,i)=>{
+          let instr=st.maneuver.type.replace(/_/g,' ');
+          if(st.maneuver.modifier)instr+=' '+st.maneuver.modifier;
+          const stepIcon=i===0?'trip_origin':i===legs[0].steps.length-1?'flag':'turn_right';
+          const stepDist=st.distance>0?Math.round(st.distance)+'m':'';
+          stepsHtml+=`<div class="route-step"><span class="mi">${stepIcon}</span><div>Step ${i+1}: ${instr.charAt(0).toUpperCase()+instr.slice(1)}${st.name?' on '+st.name:''}${stepDist?' · '+stepDist:''}</div></div>`;
+        });
+      }
+      document.getElementById('route-steps').innerHTML=stepsHtml;
+      BUILDINGS.forEach(b=>{
+        if(navTo&&navTo.bid===b.id)return;
+        if(navFrom&&navFrom.bid===b.id)return;
+        map.removeLayer(b.marker);
+      });
+      closeSheet();
+    }
+  }).catch(()=>{document.getElementById('route-info').innerHTML='<span style="color:var(--red)">Route unavailable offline</span>';});
+}
+function exitOutdoorNav(){
+  document.getElementById('nav-top').classList.remove('show');
+  document.getElementById('exit-nav-bar').style.display = 'none';
+  if(routeLine){map.removeLayer(routeLine);routeLine=null;}
+  BUILDINGS.forEach(b=>{if(!map.hasLayer(b.marker))b.marker.addTo(map);});
+  closeSheet();
+  document.getElementById('route-steps')&&(document.getElementById('route-steps').innerHTML='');
+}
+
+// ===== ENTER BUILDING =====
+function enterBuilding(bid){
+  window.currentBuildingId = bid;
+  closeSheet();
+  document.getElementById('outdoor').classList.add('exit');
+  document.getElementById('indoor').classList.add('active');
+  indoorMode=true;
+  const b=BUILDINGS.find(x=>x.id===bid)||{name:'ECE Block'};
+  document.getElementById('ih-title').textContent=b.name;
+  document.getElementById('search-wrap').style.display='none';
+  document.getElementById('mode-chip').style.display='none';
+  document.getElementById('fab-outdoor').style.display='none';
+  document.getElementById('sug-outdoor').style.display='none';
+  document.getElementById('sug-indoor').style.display='block';
+  renderFloorSel();renderIndoor();updateIndoorSug();
+}
+function exitIndoor(){
+  document.getElementById('indoor').classList.remove('active');
+  document.getElementById('outdoor').classList.remove('exit');
+  indoorMode=false;
+  document.getElementById('search-wrap').style.display='';
+  document.getElementById('mode-chip').style.display='';
+  document.getElementById('fab-outdoor').style.display='';
+  document.getElementById('sug-outdoor').style.display='';
+  document.getElementById('sug-indoor').style.display='none';
+  selRoom=null;closeSheet();
+}
+
+// ===== VERTICAL INDOOR MAP (Matching User Image Layout Exactly) =====
+function renderIndoor(){
+  const fl=curFloor;
+  const W=320, H=580;
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${iZoom}); transform-origin:top center">`;
+
+  // Arrow marker for stairs
+  s+=`<defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#333" />
+        </marker>
+        <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.1"/>
+        </filter>
+      </defs>`;
+
+  // Background + outer wall
+  s+=`<rect x="0" y="0" width="${W}" height="${H}" fill="#FAFAF9" rx="8"/>`;
+  s+=`<rect x="10" y="10" width="${W-20}" height="${H-20}" fill="none" stroke="#D6D3D1" stroke-width="2" rx="6"/>`;
+
+  // --- DRAW CORRIDORS FIRST ---
+  const corridorColor = "#F5F5F4";
+  const corridorStroke = "#E7E5E4";
+  
+  // Horizontal Corridors (Left)
+  s+=`<rect class="corridor-shape" x="20" y="140" width="100" height="20" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+  s+=`<text class="rlabel" x="70" y="152" style="font-size:8px;fill:#A8A29E">Corridor</text>`;
+  
+  s+=`<rect class="corridor-shape" x="20" y="250" width="100" height="20" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+  s+=`<text class="rlabel" x="70" y="262" style="font-size:8px;fill:#A8A29E">Corridor</text>`;
+  
+  s+=`<rect class="corridor-shape" x="20" y="360" width="100" height="20" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+  s+=`<text class="rlabel" x="70" y="372" style="font-size:8px;fill:#A8A29E">Corridor</text>`;
+
+  // Horizontal Corridors (Right)
+  s+=`<rect class="corridor-shape" x="200" y="140" width="100" height="20" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+  s+=`<text class="rlabel" x="250" y="152" style="font-size:8px;fill:#A8A29E">Corridor</text>`;
+  
+  s+=`<rect class="corridor-shape" x="200" y="250" width="100" height="20" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+  s+=`<text class="rlabel" x="250" y="262" style="font-size:8px;fill:#A8A29E">Corridor</text>`;
+  
+  s+=`<rect class="corridor-shape" x="200" y="360" width="100" height="20" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+  s+=`<text class="rlabel" x="250" y="372" style="font-size:8px;fill:#A8A29E">Corridor</text>`;
+
+  // Vertical Central Corridor
+  s+=`<rect class="corridor-shape" x="120" y="140" width="80" height="240" fill="${corridorColor}" stroke="${corridorStroke}" rx="2"/>`;
+
+  // --- DRAW STAIRS ---
+  const stairColor = "#E2E8F0";
+  const stairStroke = "#CBD5E1";
+
+  // Top Stairs Block (Connected to Exit)
+  s+=`<rect class="stair-shape" x="120" y="60" width="80" height="70" fill="${stairColor}" stroke="${stairStroke}" rx="4"/>`;
+  for(let i=0;i<4;i++) s+=`<line x1="125" y1="${75+i*10}" x2="195" y2="${75+i*10}" stroke="#94A3B8" opacity="0.6"/>`;
+  s+=`<text class="rlabel" x="160" y="115" style="font-size:10px;fill:#475569">Stairs</text>`;
+  s+=`<path d="M160,60 L160,25" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>`; // Arrow to exit
+  s+=`<path d="M160,130 L160,150" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>`; // Arrow to corridor
+
+  // Bottom Stairs Block (Connected to Entry)
+  s+=`<rect class="stair-shape" x="120" y="390" width="80" height="85" fill="${stairColor}" stroke="${stairStroke}" rx="4"/>`;
+  for(let i=0;i<4;i++) s+=`<line x1="125" y1="${405+i*10}" x2="195" y2="${405+i*10}" stroke="#94A3B8" opacity="0.6"/>`;
+  s+=`<text class="rlabel" x="160" y="460" style="font-size:10px;fill:#475569">Stairs</text>`;
+  s+=`<path d="M160,475 L160,500" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>`; // Arrow to entry
+  s+=`<path d="M160,390 L160,370" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>`; // Arrow to corridor
+
+  // --- ENTRY AND EXIT ---
+  s+=`<rect class="exit-shape" x="100" y="10" width="120" height="30" fill="#FEF2F2" stroke="#F87171" rx="4"/>`;
+  s+=`<text class="rlabel" x="160" y="25" style="font-size:12px;fill:#DC2626;font-weight:700">Exit</text>`;
+
+  s+=`<rect class="entry-shape" x="100" y="520" width="120" height="30" fill="#F0FDF4" stroke="#4ADE80" rx="4"/>`;
+  s+=`<text class="rlabel" x="160" y="535" style="font-size:12px;fill:#16A34A;font-weight:700">Entry</text>`;
+
+  // --- DRAW ROOMS ---
+  const rW = 100, rH = 90;
+  const lX = 20, rX = 200;
+  
+  // The layout follows the user's sketch:
+  // Left: T1 (R-8), T2 (R-6), B1 (R-4), B2 (R-2) from top to bottom
+  const leftRooms=['T1','T2','B1','B2'];
+  const leftYs=[50, 160, 270, 380];
+
+  leftRooms.forEach((slot,i)=>{
+    const id=fl+'-'+slot;const r=roomData[id];if(!r)return;
+    const sel=selRoom===id;const y=leftYs[i];
+    s+=`<rect class="${slot==='WR'?'wr-shape':'room-shape'}${sel?' sel':''}" x="${lX}" y="${y}" width="${rW}" height="${rH}" fill="#FFFFFF" stroke="#CBD5E1" rx="6" filter="url(#shadow)" onclick="selectIndoorRoom('${id}')"/>`;
+    s+=`<text class="rlabel${sel?' sel':''}" x="${lX+rW/2}" y="${y+rH/2-10}">${r.label}</text>`;
+    s+=`<text id="rcount-${id}" class="rcount" x="${lX+rW/2}" y="${y+rH/2+6}" fill="${cHex(r.people)}">${r.people}p</text>`;
+    s+=`<circle id="door-dot-room-${id}" cx="${lX+rW-10}" cy="${y+10}" r="5" fill="${cHex(r.people)}"><animate attributeName="r" values="4;6;4" dur="2s" repeatCount="indefinite"/></circle>`;
+  });
+
+  // Right: T3 (R-7), T4 (R-5), B3 (R-3), B4 (R-1)
+  const fi=+fl[1],isE=fi%2===0;
+  const rightRooms=['T3','T4','B3',isE?'WR':'B4'];
+  rightRooms.forEach((slot,i)=>{
+    const id=fl+'-'+slot;const r=roomData[id];if(!r)return;
+    const sel=selRoom===id;const y=leftYs[i];
+    s+=`<rect class="${slot==='WR'?'wr-shape':'room-shape'}${sel?' sel':''}" x="${rX}" y="${y}" width="${rW}" height="${rH}" fill="#FFFFFF" stroke="#CBD5E1" rx="6" filter="url(#shadow)" onclick="selectIndoorRoom('${id}')"/>`;
+    s+=`<text class="rlabel${sel?' sel':''}" x="${rX+rW/2}" y="${y+rH/2-10}">${r.label}</text>`;
+    s+=`<text id="rcount-${id}" class="rcount" x="${rX+rW/2}" y="${y+rH/2+6}" fill="${cHex(r.people)}">${r.people}p</text>`;
+    s+=`<circle id="door-dot-room-${id}" cx="${rX+10}" cy="${y+10}" r="5" fill="${cHex(r.people)}"><animate attributeName="r" values="4;6;4" dur="2s" repeatCount="indefinite"/></circle>`;
+  });
+
+  // --- DRAW NAV PATH IF A ROOM IS SELECTED ---
+  if(selRoom&&roomData[selRoom]&&roomData[selRoom].floor===fl){
+    const r=roomData[selRoom];
+    let tX = lX + rW;
+    let tY = 0;
+    
+    if(leftRooms.includes(r.slot)) {
+       tX = lX + rW;
+       tY = leftYs[leftRooms.indexOf(r.slot)] + rH/2;
+    } else {
+       tX = rX;
+       tY = leftYs[rightRooms.indexOf(r.slot)] + rH/2;
+    }
+    
+    // Draw continuous navigation path
+    let pathD = `M160,520 L160,475 M160,390 L160,${tY} L${tX},${tY}`;
+    // If the room is high up, adjusting path to pass through central corridor properly
+    if(tY < 390) {
+        pathD = `M160,520 L160,475 M160,390 L160,150 L160,${tY} L${tX},${tY}`;
+    }
+
+    s+=`<path class="nav-path" d="${pathD}"/>`;
+    s+=`<circle cx="160" cy="520" r="4" fill="#16A34A"/>`;
+    s+=`<circle cx="${tX}" cy="${tY}" r="4" fill="#DC2626"/>`;
+  }
+
+  s+=`</svg>`;
+  document.getElementById('indoor-map').innerHTML=s;
+  document.getElementById('ih-crumb').textContent=`LPU Campus › ECE Block › ${fl==='G'?'Ground Floor':fl}`;
+}
+
+function renderFloorSel(){
+  const el=document.getElementById('floor-sel');
+  el.innerHTML=FLOORS.map(f=>{
+    const rs=Object.values(roomData).filter(r=>r.floor===f);
+    const avg=rs.length?Math.round(rs.reduce((a,r)=>a+r.people,0)/rs.length):0;
+    return`<div class="fl-btn${f===curFloor?' act':''}" onclick="switchFloor('${f}')"><span class="fl-dot" style="background:${cHex(avg)}"></span>${f==='G'?'G':f}</div>`;
+  }).join('');
+}
+function switchFloor(f){curFloor=f;renderFloorSel();if(selRoom&&roomData[selRoom]?.floor!==f)selRoom=null;renderIndoor();}
+function zoomI(d){iZoom=Math.max(.6,Math.min(2.2,iZoom+d*.2));renderIndoor();}
+
+// ===== INDOOR ROOM SELECTION =====
+function selectIndoorRoom(id){
+  const r=roomData[id];if(!r)return;
+  if(r.floor!==curFloor){curFloor=r.floor;renderFloorSel();}
+  selRoom=id;renderIndoor();showRoomSheet(r);
+}
+function showRoomSheet(r){
+  if(window.glassUI) window.glassUI.showRoom(r);
+}
+
+// ===== SEARCH =====
+function doSearch(){
+  const q=document.getElementById('search-in').value.toLowerCase().trim();
+  const el=document.getElementById('search-res');
+  if(!q){el.classList.remove('show');return;}
+  let results=[];
+  BUILDINGS.forEach(b=>{if(b.name.toLowerCase().includes(q))results.push({type:'building',name:b.name,sub:'LPU Campus · '+b.cat,icon:b.icon,bid:b.id,lat:b.lat,lng:b.lng});});
+  Object.values(roomData).forEach(r=>{if((r.label+' '+r.floor+' '+r.type).toLowerCase().includes(q))results.push({type:'room',name:r.label,sub:`${r.floor} · ECE Block · ${r.people}p`,icon:'meeting_room',rid:r.id,people:r.people});});
+  el.innerHTML=results.slice(0,10).map(r=>{
+    const bc=r.people!==undefined?`<span class="sr-badge" style="background:${cHex(r.people)}">${cLabel(r.people)}</span>`:'';
+    return`<div class="sr-item" onclick="pickResult('${r.type}','${r.bid||''}','${r.rid||''}',${r.lat||0},${r.lng||0})"><div class="sr-icon"><span class="mi">${r.icon}</span></div><div class="sr-info"><div class="sr-name">${r.name}</div><div class="sr-sub">${r.sub}</div></div>${bc}</div>`;
+  }).join('');
+  el.classList.toggle('show',results.length>0);
+}
+function pickResult(type,bid,rid,lat,lng){
+  document.getElementById('search-res').classList.remove('show');
+  document.getElementById('search-in').value='';
+  if(type==='building'){map.flyTo([lat,lng],18);const b=BUILDINGS.find(x=>x.id===bid);if(b)showBuildingSheet(b);}
+  else if(type==='room'){const r=roomData[rid];if(r){enterBuilding('b33');setTimeout(()=>{curFloor=r.floor;renderFloorSel();selectIndoorRoom(rid);},500);}}
+}
+
+// ===== 360° VIEWER =====
+function openStreetView(p) {
+  if(window.panoViewer) window.panoViewer.openPano('b25', 'G', null, p.name + ' 360°');
+}
+
+function open360(id) {
+  if(!id)return;
+  const r=roomData[id];
+  if(window.panoViewer) window.panoViewer.openPano(window.currentBuildingId || 'b34', r.floor, r.id, r.label + ' 360°');
+}
+
+function close360(){
+  if(window.panoViewer) window.panoViewer.close();
+}
+function panoAdj(dir){
+  // Simplified pano adjustment
+}
+
+// ===== SIMULATION =====
+function simulate(){
+  for(const r of Object.values(roomData)){if(r.type==='washroom')continue;r.people=Math.max(0,Math.min(50,r.people+Math.floor(Math.random()*5)-2));}
+  if(indoorMode){renderIndoor();renderFloorSel();if(selRoom)showRoomSheet(roomData[selRoom]);updateIndoorSug();}
+  updateOutdoorSug();updateMarkers();
+}
+function simEnv(){for(const r of Object.values(roomData)){r.temp=Math.round((r.temp+(Math.random()*.4-.2))*10)/10;r.hum=Math.max(30,Math.min(95,r.hum+Math.floor(Math.random()*3)-1));}}
+function updateMarkers(){
+  BUILDINGS.forEach(b=>{
+    if(!b.marker)return;
+    const avg=b.hasIndoor?getECEAvg():Math.floor(Math.random()*15);
+    const dot=cHex(avg);
+    const pinColor=b.color||'#1a73e8';
+    const pinSvg=`<svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15,0 C6.72,0 0,6.72 0,15 C0,26.25 15,42 15,42 C15,42 30,26.25 30,15 C30,6.72 23.28,0 15,0 Z"
+        fill="${pinColor}"/>
+      <circle cx="15" cy="15" r="9" fill="rgba(255,255,255,0.25)"/>
+      <text x="15" y="20" text-anchor="middle" font-family="Material Icons Round" font-size="13" fill="#fff">${iconToUnicode(b.icon)}</text>
+    </svg>`;
+    const icon=L.divIcon({
+      className:'leaflet-marker-custom',
+      html:`<div class="gmap-pin" title="${b.name}"><div>${pinSvg}</div><div class="gmap-tooltip">${b.name}</div></div>`,
+      iconSize:[30,42],iconAnchor:[15,42]
+    });
+    b.marker.setIcon(icon);
+  });
+}
+function updateOutdoorSug(){
+  let best=null;
+  for(const f of FLOORS){if(f==='G')continue;const rs=Object.values(roomData).filter(r=>r.floor===f);const avg=Math.round(rs.reduce((s,r)=>s+r.people,0)/rs.length);if(!best||avg<best.avg)best={floor:f,avg};}
+  if(best)document.getElementById('sug-out-text').innerHTML=`<b>ECE Block ${best.floor} least crowded</b> · Avg ${best.avg} people`;
+}
+function updateIndoorSug(){
+  let best=null;
+  for(const f of FLOORS){if(f==='G')continue;const rs=Object.values(roomData).filter(r=>r.floor===f);const avg=Math.round(rs.reduce((s,r)=>s+r.people,0)/rs.length);const at=(rs.reduce((s,r)=>s+r.temp,0)/rs.length).toFixed(1);if(!best||avg<best.avg)best={floor:f,avg,temp:at};}
+  if(best)document.getElementById('sug-in-text').innerHTML=`<b>${best.floor} least crowded</b> · Avg ${best.avg} people · ${best.temp}°C`;
+}
+function toggleMode(){
+  liveMode=!liveMode;
+  ['mode-text','mode2'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=liveMode?'Live':'Demo';});
+  if(liveMode)pollLive();
+}
+function pollLive(){
+  if(!liveMode)return;
+  fetch('http://localhost:5000/status').then(r=>r.json()).then(d=>{if(d&&d.rooms)for(const[id,v]of Object.entries(d.rooms))if(roomData[id])Object.assign(roomData[id],v);}).catch(()=>{});
+  setTimeout(pollLive,5000);
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded',()=>{
+  initMap();updateOutdoorSug();
+  document.getElementById('sug-indoor').style.display='none';
+  
+  // Initialize new systems
+  window.panoViewer = new PanoramaViewer();
+  window.glassUI = new GlassUI();
+  window.sensorSim = new SensorSimulation(roomData, BUILDINGS);
+  window.threeRenderer = new ThreeRenderer(BUILDINGS, LPU_CENTER);
+  
+  setInterval(()=>{if(!liveMode)simEnv();},8000);
+  document.getElementById('search-in').addEventListener('focus',()=>{if(!indoorMode)document.getElementById('search-res').classList.add('show');doSearch();});
+  document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))document.getElementById('search-res').classList.remove('show');});
+
+  // --- HARDWARE SENSOR INTEGRATION ---
+  const room1Marker = L.marker([30.9010, 75.7042]).addTo(map);
+  const room2Marker = L.marker([30.9015, 75.7048]).addTo(map);
+  const room3Marker = L.marker([30.9020, 75.7055]).addTo(map);
+  const tempMarker = L.marker([30.9012, 75.7045]).addTo(map);
+
+  const getSensorIcon = (occupied) => {
+      const color = occupied ? '#ea4335' : '#34a853';
+      return L.divIcon({
+          className: 'custom-sensor-icon',
+          html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+      });
+  };
+
+  const getTempIcon = () => {
+      return L.divIcon({
+          className: 'custom-sensor-icon',
+          html: `<div style="width:24px;height:24px;border-radius:50%;background:#fbbc04;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"><span class="mi" style="font-size:14px;color:white;">thermostat</span></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+      });
+  };
+
+  tempMarker.setIcon(getTempIcon());
+
+  setInterval(async () => {
+      try {
+          const res = await fetch('http://localhost:8000/sensor-data');
+          if(!res.ok) return;
+          const data = await res.json();
+          
+          room1Marker.setIcon(getSensorIcon(data.room1));
+          room1Marker.bindPopup(`Room 1: <b>${data.room1 ? 'Occupied' : 'Empty'}</b>`);
+          
+          room2Marker.setIcon(getSensorIcon(data.room2));
+          room2Marker.bindPopup(`Room 2: <b>${data.room2 ? 'Occupied' : 'Empty'}</b>`);
+          
+          room3Marker.setIcon(getSensorIcon(data.room3));
+          room3Marker.bindPopup(`Room 3: <b>${data.room3 ? 'Occupied' : 'Empty'}</b>`);
+          
+          tempMarker.bindPopup(`<b>Environment</b><br>Temperature: ${data.temperature}°C<br>Humidity: ${data.humidity}%`);
+      } catch (err) {
+          // Silent fail so map still works if server is offline
+      }
+  }, 3000);
+});
+</script>
+<div id="exit-nav-bar" style="display:none; position:fixed; bottom:160px; left:12px; right:12px; z-index:250; background:white; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.1); padding:12px 16px; align-items:center; gap:12px;">
+  <button onclick="exitOutdoorNav()" style="background:#ef4444; color:white; border:none; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; flex-shrink:0;">✕ Exit Navigation</button>
+  <div class="exit-dest" style="flex:1; font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+  <div class="exit-eta" style="font-size:14px; font-weight:500; color:#6b7280; flex-shrink:0;"></div>
+</div>
+</body></html>
